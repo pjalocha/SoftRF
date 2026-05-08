@@ -1942,12 +1942,25 @@ void NMEA_Process_SRF_SKV_Sentences()
       } else if (strncmp(C_Version.value(), "SAV", 3) == 0) {      // $PSRFC,SAV*3C
           Serial.println(F("PSRFC Save & Reboot..."));
           nmea_cfg_restart(true);
-          // save settings to EEPROM and reboot
-
+          // save settings and reboot
+#if defined(INCLUDE_EEPROM)
+      } else if (strncmp(C_Version.value(), "EEP", 3) == 0) {      // $PSRFC,EEP*28
+        if (FS_is_mounted==true && use_eeprom==false) {
+          Serial.println(F("PSRFC Back up settings to EEPROM..."));
+          save_settings_to_EEPROM(true);   // do not reboot
+        } else {
+          Serial.println(F("Settings already are in EEPROM"));
+        }
+#endif
       } else if (strncmp(C_Version.value(), "OFF", 3) == 0) {      // $PSRFC,OFF*37
           Serial.println(F("PSRFC Shutdown..."));
           shutdown(SOFTRF_SHUTDOWN_NMEA);
-
+#if defined(ARDUINO_ARCH_NRF52)
+      } else if (strncmp(C_Version.value(), "DFU", 3) == 0) {      // $PSRFC,DFU*2F
+          Serial.println(F("Enter DFU mode..."));
+          enterUf2Dfu();
+          // enter DFU mode so can drag and drop new firmware UF2 file
+#endif
 #if defined(USE_OLED)
       } else if (strncmp(C_Version.value(), "PAG", 3) == 0) {      // $PSRFC,PAG*2E
           Serial.println(F("PSRFC Page Switch"));
@@ -2163,7 +2176,9 @@ void NMEA_Process_SRF_SKV_Sentences()
         }
 //Serial.printf("psrfs query:|%s|%s|\r\n", label, value);
         if (! query) {
-            if (stgdesc[i].type == STG_UINT1)
+            if (i == STG_MODE)
+                cfg_is_updated = true;
+            else if (stgdesc[i].type == STG_UINT1)
                 cfg_is_updated = (*((uint8_t *)(stgdesc[i].value)) != atoi(value));
             else if (stgdesc[i].type == STG_INT1)
                 cfg_is_updated = (*((int8_t *)(stgdesc[i].value)) != atoi(value));

@@ -122,7 +122,7 @@ inline int8_t esp_only(int8_t stg_type)
 static void init_stgdesc()
 {
   stgdesc[STG_VERSION]    = { "srSoftRF",     (char*)&settings->version,    STG_UINT1, STG_HIDDEN };
-  stgdesc[STG_MODE]       = { "mdmode",       (char*)&settings->mode,       STG_UINT1, 0 /* HIDE_NRF */ };
+  stgdesc[STG_MODE]       = { "mdmode",       (char*)&settings->mode,       STG_UINT1, 0 };
   stgdesc[STG_PROTOCOL]   = { "pcprotocol",   (char*)&settings->rf_protocol,STG_UINT1, 0 };
   stgdesc[STG_ALTPROTOCOL]= { "apaltprotocol",(char*)&settings->altprotocol,STG_UINT1, 0 };
   stgdesc[STG_FLR_ADSL]   = { "faflr_adsl",   (char*)&settings->flr_adsl,   STG_UINT1, 0 };
@@ -325,12 +325,6 @@ void Adjust_Settings()
 {
     if (settings->mode == SOFTRF_MODE_MORENMEA)   // obsolete
       settings->mode = SOFTRF_MODE_NORMAL;
-
-//    if (settings->mode & SOFTRF_MODE_EEPROM) {
-//      use_eeprom = true;                      // avoid flash file system
-//      settings->mode &= 0x0F;
-//    }
-//        - done in load_setting()
 
 #if defined(ARDUINO_ARCH_NRF52)
     if (settings->mode != SOFTRF_MODE_GPSBRIDGE
@@ -973,7 +967,7 @@ void show_settings_serial()
      if (format_setting(i) == false)
          continue;
      Serial.print(NMEABuffer);
-     delay(10);
+     delay(5);
   }
 
 #if defined(USE_OGN_ENCRYPTION)
@@ -1001,7 +995,7 @@ void show_settings_short()
 #endif
 
 #if defined(INCLUDE_EEPROM)
-void save_settings_to_EEPROM()
+void save_settings_to_EEPROM(bool inclusive)
 {
   Serial.println(F("Saving settings to EEPROM..."));
   eeprom_block.field.magic = SOFTRF_EEPROM_MAGIC;
@@ -1012,7 +1006,7 @@ void save_settings_to_EEPROM()
   for (int i=STG_MODE; i<STG_END; i++) {       // skip version
      if (hidden_setting(i) && stgdesc[i].hidden != STG_SAVEHIDE)
          continue;
-     if (stgdesc[i].hidden == HIDE_P)          // no file system
+     if (inclusive == false && stgdesc[i].hidden == HIDE_P)   // no file system
          continue;
      if (format_setting(i, false, true, p, EEPROM_SIZE - size) == false)
          continue;
@@ -1042,7 +1036,7 @@ void save_settings_to_file(bool reboot)
           Serial.println(F("File system assumed broken"));
       else
           Serial.println(F("File system is not mounted"));
-      save_settings_to_EEPROM();
+      save_settings_to_EEPROM(false);
       if (! reboot && SoC->Bluetooth_ops) { SoC->Bluetooth_ops->setup(); }
       SoC->WDT_setup();
       return;
@@ -1051,6 +1045,7 @@ void save_settings_to_file(bool reboot)
   Serial.println(F("Saving settings to settings.txt ..."));
   if (FILESYS.exists("/settings.txt"))
       FILESYS.remove("/settings.txt");
+  bool write_error = false;
   File SettingsFile = FILESYS.open("/settings.txt", FILE_WRITE);
   if (SettingsFile) {
       snprintf(NMEABuffer,sizeof(NMEABuffer),"# originator: model %d fw %s ID %06X\r\n",
@@ -1058,7 +1053,6 @@ void save_settings_to_file(bool reboot)
       Serial.print(NMEABuffer);
       SettingsFile.write((const uint8_t *)NMEABuffer, strlen(NMEABuffer));
       settings->version = SOFTRF_SETTINGS_VERSION;
-      bool write_error = false;
       for (int i=STG_VERSION; i<STG_END; i++) {
            if (format_setting(i) == false)
                continue;
@@ -1078,8 +1072,13 @@ void save_settings_to_file(bool reboot)
       else
           Serial.println(F("... OK"));
   } else {
+      write_error = true;
       Serial.println(F("Failed to open settings.txt"));
   }
+#if defined(INCLUDE_EEPROM)
+  if (write_error)
+      save_settings_to_EEPROM(true);
+#endif
   if (! reboot && SoC->Bluetooth_ops) { SoC->Bluetooth_ops->setup(); }
   SoC->WDT_setup();
 }
@@ -1285,10 +1284,10 @@ bool load_settings_from_file()
 bool load_settings()
 {
 #if defined(FILESYS)
-    if (use_eeprom) {
-        // not reachable
-        Serial.println(F("File system assumed broken"));
-    } else if (load_settings_from_file() == true) {
+    //if (use_eeprom) {
+    //    Serial.println(F("File system assumed broken"));
+    //} else
+    if (load_settings_from_file() == true) {
         return true;
     }
 #endif
