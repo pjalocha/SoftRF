@@ -235,8 +235,21 @@ uint16_t update_crc_ccitt( uint16_t crc, char c ) {
     defined(ARDUINO_ARCH_RENESAS) || defined(ARDUINO_ARCH_SILABS)
     crc = (crc << 8) ^ pgm_read_word(&crc_tabccitt[tmp]);
 #else
-    if (crc_tabccitt_init == 2)  // init failed to malloc() the table
-        return 0;
+    if (crc_tabccitt_init == 2) {
+        // init failed to malloc() the table
+        // do it the slow way:
+        uint16_t t, c;
+        t = 0;
+        c = (tmp << 8);
+        for (int j=0; j<8; j++) {
+            if ( (t ^ c) & 0x8000 )
+                t = ( t << 1 ) ^ P_CCITT;
+            else
+                t <<= 1;
+            c <<= 1;
+        }
+        return ((crc << 8) ^ t);
+    }
     crc = (crc << 8) ^ crc_tabccitt[tmp];
 #endif
 
@@ -632,8 +645,21 @@ uint16_t update_crc_gdl90( uint16_t crc, char c ) {
     defined(ARDUINO_ARCH_RENESAS) || defined(ARDUINO_ARCH_SILABS)
     crc = pgm_read_word(&crc_tabccitt[tmp]) ^ (crc << 8) ^  short_c;
 #else
-    if (crc_tabccitt_init == 2)  // init failed to malloc() the table
-        return 0;
+    if (crc_tabccitt_init == 2) {
+        // init failed to malloc() the table
+        // do it the slow way:
+        uint16_t t, c;
+        t = 0;
+        c = (tmp << 8);
+        for (int j=0; j<8; j++) {
+            if ( (t ^ c) & 0x8000 )
+                t = ( t << 1 ) ^ P_CCITT;
+            else
+                t <<= 1;
+            c <<= 1;
+        }
+        return (t ^ (crc << 8) ^ short_c);
+    }
     crc = crc_tabccitt[tmp] ^ (crc << 8) ^  short_c;
 #endif
 
