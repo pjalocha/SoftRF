@@ -456,7 +456,7 @@ void Settings_defaults();
 int  find_setting(const char *label, bool shorthand=false);
 bool load_setting(const int index, const char *value);
 bool load_settings(void);
-bool format_setting(const int index, const bool comment=true, bool shorthand=false, char *buf=NMEABuffer, size_t size=sizeof(NMEABuffer));
+bool format_setting(const int index, const bool comment=true, bool shorthand=false, char *buf=CONFBuffer, size_t size=sizeof(CONFBuffer));
 void show_settings_serial(void);
 void save_settings_to_file(bool reboot);
 void save_settings_to_EEPROM(bool inclusive=false);

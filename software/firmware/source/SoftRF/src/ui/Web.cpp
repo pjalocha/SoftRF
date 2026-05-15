@@ -1159,17 +1159,16 @@ void handleAdvStgs() {
   size -= len;
 
   for (int i=STG_MODE; i<STG_END; i++) {
-      char buf[64];
       if (stgdesc[i].type == STG_VOID)
           continue;
       if (hidden_setting(i))     // only accessible via editing the file
           continue;
-      if (format_setting(i, false, false, buf, 64) == false)
+      if (format_setting(i, false, false, CONFBuffer, sizeof(CONFBuffer)) == false)
           continue;
       const char *w = &stgdesc[i].label[2];
       int comma = strlen(w);
-      const char *v = &buf[comma+1];
-      if (buf[comma] != ',')  // should not happen
+      const char *v = &CONFBuffer[comma+1];
+      if (CONFBuffer[comma] != ',')  // should not happen
           v = "";
       if (i == STG_PSK && settings->psk[0] != '\0')
           v = "********";
@@ -1184,7 +1183,7 @@ void handleAdvStgs() {
 <td align=left>%s</td>\
 </tr>"),
            w, w, v, z);
-           // the setting's label used both as text and the name of the INPUT
+           // the setting label is used both as text and as the name of the INPUT
       len = strlen(offset);
       offset += len;
       size -= len;

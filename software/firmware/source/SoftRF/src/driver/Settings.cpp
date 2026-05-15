@@ -961,13 +961,16 @@ bool format_setting(const int i, const bool comment, bool shorthand, char *buf, 
 
 void show_settings_serial()
 {
+  Serial.printf("Settings loaded from %s:\r\n",
+      settings_used==STG_FILE? "file" : settings_used==STG_EEPROM? "EEPROM" : "defaults");
+
   for (int i=STG_MODE; i<STG_END; i++) {
      if (hidden_setting(i))
          continue;
      if (format_setting(i) == false)
          continue;
-     Serial.print(NMEABuffer);
-     delay(5);
+     Serial.print(CONFBuffer);
+     delay(10);
   }
 
 #if defined(USE_OGN_ENCRYPTION)
@@ -987,9 +990,9 @@ void show_settings_short()
   for (int i=STG_MODE; i<STG_END; i++) {
      if (format_setting(i, false, true) == false)
          continue;
-     Serial.print(NMEABuffer);
+     Serial.print(CONFBuffer);
      Serial.print("\r");         // outputs xxxx\n\r
-     delay(10);
+     delay(5);
   }
 }
 #endif
@@ -1048,17 +1051,17 @@ void save_settings_to_file(bool reboot)
   bool write_error = false;
   File SettingsFile = FILESYS.open("/settings.txt", FILE_WRITE);
   if (SettingsFile) {
-      snprintf(NMEABuffer,sizeof(NMEABuffer),"# originator: model %d fw %s ID %06X\r\n",
+      snprintf(CONFBuffer,sizeof(CONFBuffer),"# originator: model %d fw %s ID %06X\r\n",
                    hw_info.model, SOFTRF_FIRMWARE_VERSION, SoC->getChipId());
-      Serial.print(NMEABuffer);
-      SettingsFile.write((const uint8_t *)NMEABuffer, strlen(NMEABuffer));
+      Serial.print(CONFBuffer);
+      SettingsFile.write((const uint8_t *)CONFBuffer, strlen(CONFBuffer));
       settings->version = SOFTRF_SETTINGS_VERSION;
       for (int i=STG_VERSION; i<STG_END; i++) {
            if (format_setting(i) == false)
                continue;
-           int len = strlen(NMEABuffer);
-           if (SettingsFile.write((const uint8_t *)NMEABuffer, len) == len) {
-               Serial.print(NMEABuffer);
+           int len = strlen(CONFBuffer);
+           if (SettingsFile.write((const uint8_t *)CONFBuffer, len) == len) {
+               Serial.print(CONFBuffer);
            } else {
                Serial.println(F("Error writing to settings.txt"));
                write_error = true;
@@ -1151,7 +1154,7 @@ bool load_setting(const int idx, const char *q)
     return true;
 }
 
-static bool interpretShorthand(char * buf=NMEABuffer)
+static bool interpretShorthand(char * buf=CONFBuffer)
 {
     int i = find_setting(buf, true);
     if (i == STG_END)   // not found
@@ -1159,7 +1162,7 @@ static bool interpretShorthand(char * buf=NMEABuffer)
     return load_setting(i,buf+2);  // what follows the short label, no comma
 }
 
-static bool interpretSetting(char * buf=NMEABuffer)
+static bool interpretSetting(char * buf=CONFBuffer)
 {
     char *p = buf;
     while (*p != ',') {
@@ -1209,7 +1212,7 @@ static bool interpretSetting(char * buf=NMEABuffer)
 // known obsolete settings labels, ignore them, don't complain
 bool known_obsolete_label()
 {
-    if (strcmp(NMEABuffer, "json")==0)
+    if (strcmp(CONFBuffer, "json")==0)
         return true;
     return false;
 }
@@ -1237,20 +1240,20 @@ bool load_settings_from_file()
     Serial.println(F("Loading settings from file..."));
     int nsettings = -1;
     bool all_settings_valid = true;
-    while (getline(SettingsFile, NMEABuffer, sizeof(NMEABuffer)) && --limit>0) {
-        Serial.println(NMEABuffer);
+    while (getline(SettingsFile, CONFBuffer, sizeof(CONFBuffer)) && --limit>0) {
+        Serial.println(CONFBuffer);
         // allow blank or comment lines
-        if (NMEABuffer[0] == '#')  continue;
-        if (NMEABuffer[0] == '*')  continue;
-        if (NMEABuffer[0] == ';')  continue;
-        if (NMEABuffer[0] == '/')  continue;
-        if (NMEABuffer[0] == ' ')  continue;
-        if (NMEABuffer[0] == '\0')  continue;
+        if (CONFBuffer[0] == '#')  continue;
+        if (CONFBuffer[0] == '*')  continue;
+        if (CONFBuffer[0] == ';')  continue;
+        if (CONFBuffer[0] == '/')  continue;
+        if (CONFBuffer[0] == ' ')  continue;
+        if (CONFBuffer[0] == '\0')  continue;
         if (interpretSetting() == false) {
           if (! known_obsolete_label()) {
             // load what is valid and ignore the invalid
             all_settings_valid = false;
-            settings_message("Invalid setting label '%s' in file", NMEABuffer);
+            settings_message("Invalid setting label '%s' in file", CONFBuffer);
             Serial.println(settings_message());
           }
         } else {

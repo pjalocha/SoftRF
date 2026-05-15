@@ -62,6 +62,7 @@ void NMEAOutD(void);           // without checksum
 void NMEA_GGA(void);
 
 extern char NMEABuffer[NMEA_BUFFER_SIZE];
+extern char CONFBuffer[NMEA_BUFFER_SIZE];
 unsigned int NMEA_add_checksum(char *buf=NMEABuffer);
 
 void sendPFLAJ();
