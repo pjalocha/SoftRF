@@ -214,14 +214,14 @@ void LED_loop() {
 #if defined(ESP32)
   if (hw_info.model == SOFTRF_MODEL_PRIME_MK2) {
     if (hw_info.revision >= 8)
-      return;
+      return;    // blue LED is handled in ESP32_loop() via PMU
     if (settings->gnss_pins == EXT_GNSS_15_14)
       return;    // pin 14 is connected to the LED on the v0.7
     if (settings->volume != BUZZER_OFF)
       return;
     if (Battery_voltage() > Battery_threshold() ) {
         /* Indicate positive power supply */
-        if (led_status != LED_STATE_ON)
+        if (digitalRead(status_LED) != LED_STATE_ON)
             digitalWrite(status_LED, LED_STATE_ON);
     } else {
         digitalWrite(status_LED, (millis() & 0x0200)? HIGH : LOW);

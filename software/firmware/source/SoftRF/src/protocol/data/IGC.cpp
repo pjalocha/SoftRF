@@ -900,20 +900,33 @@ bool eraseOldestFlightLog()
     if (! root)
         return false;
     File file = root.openNextFile();
-    char fn[20];
     String file_name;
     while(file) {
+#if defined(ESP32)
+        file_name = file.name();
+        Serial.println(file_name);
+#else
+        char fn[20];
         file.getName(fn,sizeof(fn));
         Serial.println(fn);
         file_name = fn;
+#endif
         if (file_name.endsWith(".IGC") || file_name.endsWith(".igc")
         ||  file_name.endsWith(".IGZ") || file_name.endsWith(".igz")) {
             ++found;
+#if defined(ESP32)
+            if (strcmp(oldestlog.c_str(), file.name()) > 0) {
+                oldestlog = file.name();
+                Serial.print(F("Candidate oldest log: "));
+                Serial.println(oldestlog);
+            }
+#else
             if (strcmp(oldestlog.c_str(), fn) > 0) {
                 oldestlog = fn;
                 Serial.print(F("Candidate oldest log: "));
                 Serial.println(oldestlog);
             }
+#endif
         }
         file = root.openNextFile();
     }
