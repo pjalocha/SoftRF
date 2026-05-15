@@ -3745,6 +3745,12 @@ static size_t nRF52_USB_write(const uint8_t *buffer, size_t size)
   return rval;
 }
 
+static void nRF52_USB_flushTXD()
+{
+  if (USBSerial)
+    USBSerial.flush();
+}
+
 IODev_ops_t nRF52_USBSerial_ops = {
   "nRF52 USBSerial",
   nRF52_USB_setup,
@@ -3752,7 +3758,8 @@ IODev_ops_t nRF52_USBSerial_ops = {
   nRF52_USB_fini,
   nRF52_USB_available,
   nRF52_USB_read,
-  nRF52_USB_write
+  nRF52_USB_write,
+  nRF52_USB_flushTXD
 };
 
 static bool nRF52_ADB_setup()

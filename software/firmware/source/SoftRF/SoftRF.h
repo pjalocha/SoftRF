@@ -35,7 +35,7 @@
 #include <raspi/raspi.h>
 #endif /* RASPBERRY_PI */
 
-#define SOFTRF_FIRMWARE_VERSION "MB201"
+#define SOFTRF_FIRMWARE_VERSION "MB202"
 #define SOFTRF_IDENT            "SoftRF"
 #define SOFTRF_USB_FW_VERSION   0x0101
 
@@ -273,6 +273,7 @@ typedef struct IODev_ops_struct {
   int (*available)(void);
   int (*read)(void);
   size_t (*write)(const uint8_t *buffer, size_t size);
+  void (*flushTXD)();
 } IODev_ops_t;
 
 typedef struct DB_ops_struct {

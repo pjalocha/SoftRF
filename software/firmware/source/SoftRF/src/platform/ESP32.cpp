@@ -3431,6 +3431,12 @@ static size_t ESP32S2_USB_write(const uint8_t *buffer, size_t size)
 
   return rval;
 }
+
+static void ESP32S2_USB_flushTXD()
+{
+  if (USBSerial)
+    USBSerial.flush();
+}
 #endif /* USE_USB_HOST || ARDUINO_USB_CDC_ON_BOOT */
 
 #if ARDUINO_USB_CDC_ON_BOOT || defined(USE_USB_HOST)
@@ -3441,7 +3447,8 @@ IODev_ops_t ESP32S2_USBSerial_ops = {
   ESP32S2_USB_fini,
   ESP32S2_USB_available,
   ESP32S2_USB_read,
-  ESP32S2_USB_write
+  ESP32S2_USB_write,
+  ESP32S2_USB_flushTXD
 };
 #endif /* USE_USB_HOST || ARDUINO_USB_CDC_ON_BOOT */
 #endif /* CONFIG_IDF_TARGET_ESP32S2 */

@@ -72,9 +72,15 @@ The Bootloader is capable to self-program an application firmware into the devic
 
 1. Download appropriate version of the SoftRF firmware from [this location](https://github.com/moshe-braner/SoftRF/tree/master/software/firmware/binaries/nRF52840/SoftRF/MassStorage) ;
 
-2. Connect the SoftRF Badge Edition device to your PC by means of a USB cable (Type-A <-> Type-C) ;
+2. Connect the SoftRF device to your PC by means of a USB cable (Type-A <-> Type-C) ;
 
-3. Double click (within 0.5 seconds) onto the SoftRF device RESET button. A virtual disk with **NRF52BOOT** (or **TECHOBOOT**) label should appear in your "File manager" afterwards.
+3. Enter "DFU mode", using the procedure that fits your device:
+    * on the T-Echo or M1, double click (two clicks within 0.5 seconds) the RESET button
+    * on the M3, press and hold the button for close to 20 seconds
+    * on the T1000-E, flip the magnetic USB connector twice holding the button pressed
+         (see short video here: https://github.com/lyusupov/SoftRF/wiki/Card-Edition.-Quick-start )
+    * or, for any of these devices, connect from https://ogn.helioho.st/mysoftrf/ and click "update firmware"
+   A virtual storage device labeled TECHOBOOT, T1000-E or ThinknodeM1/3 will then appear in your "File manager".
 
 4. Drag the downloaded firmware file by your pointing device (mouse, trackball,...) , then drop it into **NRF52BOOT** (or **TECHOBOOT**) disk. Wait until the file transfer is complete.
 

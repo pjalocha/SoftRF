@@ -160,7 +160,7 @@ void setup()
   for (int i=0; i < 20; i++) {if (Serial1) break; else delay(100);}
   delay(500);
 #endif
-  Serial.println("USB Serial alive");
+  //Serial.println("USB Serial alive");
 
 #if LOGGER_IS_ENABLED
   Logger_setup();
@@ -308,7 +308,6 @@ Serial.println(ESP.getFreePsram());
 #endif /* EXCLUDE_MAVLINK */
   {
     hw_info.gnss = GNSS_setup();
-Serial.println(F("... GNSS_setup() returned"));
     ThisAircraft.aircraft_type = settings->acft_type;
   }
   ThisAircraft.protocol = settings->rf_protocol;
@@ -316,24 +315,19 @@ Serial.println(F("... GNSS_setup() returned"));
   ThisAircraft.no_track = settings->no_track;
 
   Battery_setup();
-Serial.println(F("... Battery_setup() returned"));
   Traffic_setup();
-Serial.println(F("... Traffic_setup() returned"));
 
   SoC->swSer_enableRx(false);
 
   WiFi_setup();
-Serial.println(F("... WiFi_setup() returned"));
 
   if (SoC->USB_ops) {
      SoC->USB_ops->setup();
   }
-Serial.println(F("... USB_ops->setup() returned"));
 
   if (SoC->Bluetooth_ops) {
      SoC->Bluetooth_ops->setup();
   }
-Serial.println(F("... Bluetooth_ops->setup() returned"));
 
   OTA_setup();
   Web_setup();
@@ -345,7 +339,6 @@ Serial.println(F("... Bluetooth_ops->setup() returned"));
 #endif
 
   LED_setup();   // moved here to allow Serial2 to grab pin 4
-Serial.println(F("... LED_setup() returned"));
 
 #if defined(ENABLE_TTN)
   TTN_setup();
@@ -405,8 +398,8 @@ Serial.println(SoC->getResetInfo());
 Serial.print("Memory available in PSRAM after setup: ");
 Serial.println(ESP.getFreePsram());
 #endif
-Serial.print("settings_used=");
-Serial.println(settings_used);
+//Serial.print("settings_used=");
+//Serial.println(settings_used);
 
 #if defined(ARDUINO_ARCH_NRF52)
     // check if any .IGX files need decompression
@@ -439,7 +432,6 @@ void shutparts()
   SERIAL_FLUSH();
   SoC->swSer_enableRx(false);
   Buzzer_fini();
-Serial.println("Buzzer_fini() returned");
 #if defined(ESP32)
   Voice_fini();
   Strobe_fini();
@@ -448,12 +440,10 @@ Serial.println("Buzzer_fini() returned");
   WiFi_fini();
 #endif
   RF_Shutdown();
-Serial.println("RF_Shutdown() returned");
   if (SoC->USB_ops)
      SoC->USB_ops->fini();
   if (settings->mode != SOFTRF_MODE_UAV)
     GNSS_fini();
-Serial.println("GNSS_fini() returned");
   delay(1000);
 }
 
@@ -462,9 +452,7 @@ void shutdown(int reason)
 //Serial.println("shutdown()...");
   shutparts();
   SoC->Display_fini(reason);
-Serial.println("Display_fini() returned");
   SoC->Button_fini();
-Serial.println("Button_fini() returned");
   SoC_fini(reason);
 }
 

@@ -19,13 +19,20 @@
 #ifndef BUZZERHELPER_H
 #define BUZZERHELPER_H
 
-#define ALARM_TONE_HZ     1040
+#define ALARM_TONE_HZ     2700
 #define ALARM_TONE_MS     1000
 
 /* different sounds for different alarm levels: */
+#if defined(ESP32)
 #define ALARM_TONE_HZ_LOW        2700
 #define ALARM_TONE_HZ_IMPORTANT  3000
 #define ALARM_TONE_HZ_URGENT     3300
+#else
+// changed frequencies to fit T1000E repsonse
+#define ALARM_TONE_HZ_LOW        2300
+#define ALARM_TONE_HZ_IMPORTANT  2500
+#define ALARM_TONE_HZ_URGENT     2700
+#endif
 #define ALARM_BEEPS_LOW        1
 #define ALARM_BEEPS_IMPORTANT  2
 #define ALARM_BEEPS_URGENT     5
