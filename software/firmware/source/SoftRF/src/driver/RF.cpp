@@ -380,7 +380,7 @@ Serial.println(Bin2Hex((byte *)RL_rxPacket, size));
       } else {
           RF_last_protocol = RF_PROTOCOL_NONE;
           //success = false;
-Serial.printf("sw Unidentified packet protocol 0x%02x 0x%02x\r\n", byte1, byte2);
+//Serial.printf("sw Unidentified packet protocol 0x%02x 0x%02x\r\n", byte1, byte2);
           return 0;
       }
     } else {  // Manchester hardware or no Manchester - assume inverted payload

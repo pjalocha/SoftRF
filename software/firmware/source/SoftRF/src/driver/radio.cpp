@@ -491,7 +491,7 @@ Serial.printf("sx1276 FANET rx length %d != pkt_size %d\r\n", length, pkt_size);
 Serial.println("sx1276 rx error");
       return 0;
   }
-#if 1
+#if 0
   Serial.print(F("rcvd "));
   Serial.print(pkt_size);
   Serial.print(F(" bytes, getRSSI(): "));
@@ -982,7 +982,7 @@ static int16_t sx1262_transmit(uint8_t *packet, uint8_t length)
 {
   sx1262_setup(curr_tx_protocol_ptr, true);  // does finishReceive() & standby()
 
-#if 1
+#if 0
 Serial.printf("calling chip->transmit(length=%d, airtime=%d)\r\n", length, curr_tx_protocol_ptr->air_time);
 #endif
   uint16_t rl_state = radio_sx1262->transmit(packet, (size_t) length,
