@@ -2135,25 +2135,29 @@ uint8_t Try_GNSS_sentence() {
     bool is_g = (gb[1]=='G');
     bool is_p = (gb[1]=='P');
     if (!is_g && !is_p)
-        return 0;        // neither GNSS sentence nor SoftRF sentence
-    if (is_p && gb[2]=='G')
-        return 0;        // ignore $PGRMZ
+        return 0;        // not a GNSS sentence
     if (gb[6] != ',')
-        return 0;        // not $GPGGA, $GPRMC, etc nor $PFSIM, $PSRF* or $PSKVC
+        return 0;        // not $GPGGA, $GPRMC, etc
 
     if (is_p) {
+#if 0
+        // SoftRF config sentences now handled in NMEA_bridge_send() only
         if (gb[2]=='S' && ((gb[3]=='R' && gb[4]=='F') || (gb[3]=='K' && gb[4]=='V'))) {
             NMEA_Process_SRF_SKV_Sentences();
             GNSSbuf[GNSS_cnt+1] = '\0';
             Serial.println(gb);
             return 2;
         }
+#endif
+        // But PFSIM is handled here
         if (gb[2]=='F' && gb[3]=='S' && gb[4]=='I' && gb[5]=='M') {
             process_pfsim_sentence();
             GNSSbuf[GNSS_cnt+1] = '\0';
             Serial.println(gb);
             return 2;
         }
+
+        return 0;    // ignore $PGRMZ
     }
 
     bool is_gga = (is_g && gb[3]=='G' && gb[4]=='G' && gb[5]=='A');
@@ -2277,6 +2281,7 @@ void PickGNSSFix()
 {
   uint8_t c = 0;
 
+#if defined(ESP32)
   if (is_prime_mk2) {
 
     if (settings->debug_flags & DEBUG_SIMULATE) {
@@ -2409,84 +2414,23 @@ void PickGNSSFix()
 
     return;
   }
+#endif
 
-  // other models:
+  // models other than the T-Beam:
 
-  /*
-   * Check SW/HW UARTs, USB and BT for data
-   * WARNING! Make use only one input source at a time.
-   */
-   // - note there is nothing here to stop interleaving sentences from different sources!
   while (true) {
-#if !defined(USE_NMEA_CFG)
+
+    // only use the internal GNSS, leave other ports alone for data bridging
+    // - removed the polling here of serial, BT etc
+    // - they are polled in NMEA_loop() for config commands
+
     if (Serial_GNSS_In.available() > 0) {
-      c = Serial_GNSS_In.read();
-    } else if (Serial.available() > 0) {
-      c = Serial.read();
-    } else if (SoC->Bluetooth_ops && SoC->Bluetooth_ops->available() > 0) {
-      c = SoC->Bluetooth_ops->read();
-    } else {
-      /* return back if no input data */
-      break;
-    }
-      /*
-       * Don't forget to disable echo:
-       *
-       * stty raw -echo -F /dev/rfcomm0
-       *
-       * GNSS input becomes garbled otherwise
-       */
-
-      // Serial.write((char) c);
-      /* Ignore Bluetooth input for a while */
-      // break;
-#else
-    /*
-     * Give priority to control channels over default GNSS input source on
-     * 'Dongle', 'Retro', 'Uni', 'Mini', 'Badge', 'Academy' and 'Lego' Editions
-     */
-
-    /* Bluetooth input is first */
-    if (SoC->Bluetooth_ops && SoC->Bluetooth_ops->available() > 0) {
-      c = SoC->Bluetooth_ops->read();
-
-      NMEA_Source = DEST_BLUETOOTH;
-
-    /* USB input is second */
-    } else if (SoC->USB_ops && SoC->USB_ops->available() > 0) {
-      c = SoC->USB_ops->read();
-
-      NMEA_Source = DEST_USB;
-
-#if defined(ARDUINO_NUCLEO_L073RZ)
-      /* This makes possible to configure S76x's built-in SONY GNSS from aside */
-      if (hw_info.model == SOFTRF_MODEL_DONGLE) {
-        Serial_GNSS_Out.write(c);
-      }
-#endif
-
-    /* Serial input is third */
-    } else if (SerialOutput.available() > 0) {
-      c = SerialOutput.read();
-
-      NMEA_Source = DEST_UART;
-
-#if 0
-      /* This makes possible to configure HTCC-AB02S built-in GOKE GNSS from aside */
-      if (hw_info.model == SOFTRF_MODEL_MINI) {
-        Serial_GNSS_Out.write(c);
-      }
-#endif
-
-    /* Built-in GNSS input */
-    } else if (Serial_GNSS_In.available() > 0) {
       c = Serial_GNSS_In.read();
       NMEA_Source = DEST_NONE;
     } else {
       /* return back if no input data */
       break;
     }
-#endif /* USE_NMEA_CFG */
 
     if (c == -1) {
       /* retry */
@@ -2519,44 +2463,8 @@ void PickGNSSFix()
     }
 #endif /* ENABLE_GNSS_STATS2 */
 
-    if (Try_GNSS_sentence() == 1) {
-#if defined(USE_NMEA_CFG)
-      //if (GNSSbuf[1]!='G')
-      if (GNSSbuf[1]=='P')
-          NMEA_Process_SRF_SKV_Sentences();
-          // if it was a valid sentence but not a GNSS sentence
-#endif /* USE_NMEA_CFG */
-    }
+    (void) Try_GNSS_sentence();
 
-#if defined(ENABLE_D1090_INPUT)
-    if (GNSSbuf[GNSS_cnt]   == '\n' &&
-        GNSS_cnt             >  1   &&
-        GNSSbuf[GNSS_cnt-1] == '\r' &&
-        GNSSbuf[GNSS_cnt-2] == ';')
-    {
-      int i=0;
-
-      if (GNSS_cnt > 16 && GNSSbuf[GNSS_cnt-17] == '*') {
-        for (i=0; i<14; i++) {
-          if (!isxdigit(GNSSbuf[GNSS_cnt-16+i])) break;
-        }
-        if (i>=14) {
-          D1090_Import(&GNSSbuf[GNSS_cnt-17]);
-          GNSS_cnt -= 18;
-        }
-      } else if (GNSS_cnt > 30 && GNSSbuf[GNSS_cnt-31] == '*') {
-        for (i=0; i<28; i++) {
-          if (!isxdigit(GNSSbuf[GNSS_cnt-30+i])) break;
-        }
-        if (i>=28) {
-          D1090_Import(&GNSSbuf[GNSS_cnt-31]);
-          GNSS_cnt -= 32;
-        }
-      }
-    }
-#endif /* ENABLE_D1090_INPUT */
-
-    //if (GNSSbuf[GNSS_cnt] == '\n' || GNSS_cnt == sizeof(GNSSbuf)-1) {
     if (c == '\r' || c == '\n' || GNSS_cnt == sizeof(GNSSbuf)-1) {
       GNSS_cnt = 0;
     } else {
