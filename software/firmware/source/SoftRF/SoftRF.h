@@ -123,6 +123,8 @@
 #define ENABLE_AHRS
 #endif /* PREMIUM_PACKAGE */
 
+#define CALLSIGN_LEN 33    // to fit FANET "name" field - was 10 = size of mdb.callsign + 1
+
 typedef struct CONTAINER {
 
     uint8_t   protocol;
@@ -194,7 +196,7 @@ typedef struct CONTAINER {
     uint32_t  positiontime;
     uint32_t  velocitytime;
     uint32_t  mode_s_time;
-    uint8_t   callsign[33];    // to fit FANET "name" field - was 10 = size of mdb.callsign + 1
+    uint8_t   callsign[CALLSIGN_LEN];
 
 } container_t;
 

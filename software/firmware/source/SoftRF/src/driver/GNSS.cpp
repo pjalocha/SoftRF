@@ -1773,11 +1773,30 @@ byte GNSS_setup() {
   }
 
   if (hw_info.model == SOFTRF_MODEL_PRIME_MK2 ||
-      hw_info.model == SOFTRF_MODEL_PRIME_MK3 ||
-      hw_info.model == SOFTRF_MODEL_UNI       ||
+//    hw_info.model == SOFTRF_MODEL_PRIME_MK3 ||
+//    hw_info.model == SOFTRF_MODEL_UNI       ||
       hw_info.model == SOFTRF_MODEL_BADGE     ||
+//    hw_info.model == SOFTRF_MODEL_ACADEMY   ||
+//    hw_info.model == SOFTRF_MODEL_LEGO      ||
+//    hw_info.model == SOFTRF_MODEL_ES        ||
+//    hw_info.model == SOFTRF_MODEL_BALKAN    ||
+//    hw_info.model == SOFTRF_MODEL_HAM       ||
+//    hw_info.model == SOFTRF_MODEL_MIDI      ||
+//    hw_info.model == SOFTRF_MODEL_ECO       ||
+//    hw_info.model == SOFTRF_MODEL_INK       ||
+      hw_info.model == SOFTRF_MODEL_CARD      ||
+//    hw_info.model == SOFTRF_MODEL_COZY      ||
       hw_info.model == SOFTRF_MODEL_HANDHELD  ||
-      hw_info.model == SOFTRF_MODEL_LEGO)
+      hw_info.model == SOFTRF_MODEL_GIZMO     ||
+//    hw_info.model == SOFTRF_MODEL_NANO      ||
+//    hw_info.model == SOFTRF_MODEL_DECENT    ||
+//    hw_info.model == SOFTRF_MODEL_NEO       ||
+//    hw_info.model == SOFTRF_MODEL_SOLARIS   ||
+      hw_info.model == SOFTRF_MODEL_POCKET    ||
+//    hw_info.model == SOFTRF_MODEL_LABUBU    ||
+//    hw_info.model == SOFTRF_MODEL_CONCORDE  ||
+//    hw_info.model == SOFTRF_MODEL_RUGGED    ||
+      hw_info.model == SOFTRF_MODEL_AIRVENTURE)
   {
     // power on by wakeup call
     Serial_GNSS_Out.write((uint8_t) 0); GNSS_FLUSH(); delay(1000);
@@ -2413,7 +2432,8 @@ void PickGNSSFix()
     }        // infinite loop unless !Serial_GNSS_In.available() above
 
     return;
-  }
+
+  }       // end of if (is_prime_mk2)
 #endif
 
   // models other than the T-Beam:

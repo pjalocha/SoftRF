@@ -560,11 +560,26 @@ bool legacy_decode(void *buffer, container_t *this_aircraft, ufo_t *fop) {
         return latest_decode(buffer, this_aircraft, fop);
 
     if (pkt->msg_type != 0) {
-        Serial.println("skipping packet msg_type neither 2 nor 0");
+        if (settings->nmea_d || settings->nmea2_d) {
+#if 1
+          if (settings->debug_flags & 0x10000000) {
+            /* output the raw non-traffic packet as a whole, in hex */
+            snprintf_P(NMEABuffer, sizeof(NMEABuffer),
+              PSTR("$PSRFM,%ld,%06X,%d,%s\r\n"),
+              timestamp, fop->addr, pkt->msg_type,
+              bytes2Hex((byte *)buffer, sizeof (latest_packet_t)));
+            //Serial.print(NMEABuffer);
+            NMEAOutD();
+          } else
+#endif
+          {
+            Serial.println("skipping packet msg_type neither 2 nor 0");
+          }
+        }
         return false;
     }
 
-#if 1
+#if 0
     if (! fop->relayed) {
         //Serial.print("received V6 packet from ID ");
         //Serial.println(fop->addr,HEX);

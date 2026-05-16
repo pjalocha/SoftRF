@@ -1163,7 +1163,7 @@ static bool parse_identity(int i)
     //            mm.type, mm.sub, msg[4], ac_type);
     //}
 
-    if (cip->callsign[0]!='\0' && cip->callsign[9]!='?')   // received callsign already recorded
+    if (cip->callsign[0]!='\0' && cip->callsign[CALLSIGN_LEN-1]!='?')   // received callsign already recorded
         return true;
 
     //raw_callsign = last 6 bytes
@@ -1186,7 +1186,7 @@ static bool parse_identity(int i)
     if (cip->callsign[5]==' ') { cip->callsign[5]='\0';
     if (cip->callsign[4]==' ') { cip->callsign[4]='\0';
     }}}} else cip->callsign[8] = '\0';
-    cip->callsign[9] = '\0';                 // marks as a received callsign, not computed
+    cip->callsign[CALLSIGN_LEN-1] = '\0';     // marks as a received callsign, not computed
 
     return true;
 }
