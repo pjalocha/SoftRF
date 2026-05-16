@@ -3,7 +3,7 @@ Basic Documentation for Moshe Braner's version of SoftRF
 
 By Moshe Braner
 
-This version last updated May 7, 2026 to fit software version MB201
+This version last updated May 15, 2026 to fit software version MB202
 The latest version of this document is always here:
   https://github.com/moshe-braner/SoftRF/blob/master/software/firmware/documentation
 or direct link:
@@ -198,7 +198,7 @@ Once that is done, can update the firmware using the same method as the T-Echo, 
 
 The Web Interface (T-Beam only)
 
-After startup, SoftRF on a T-Beam tries to connect to the WiFi network specified in the settings (if both an SSID and a password were specified).  If a connection is not successful (in 10 seconds), it creates its own Wifi network.  Use a computer, tablet, or smartphone to connect to the network.  If using an ambient network, connect to it as normal.  Otherwise, the network SoftRF creates is named SoftRF-xxxxxx where xxxxxx is the device id.  The device ID may differ from the aircraft ID shown on the OLED - check the fourth (or fifth) page on the OLED for the SSID.  Or, you can specify the name for the network SoftRF creates in the "myssid" setting.  Either way, the password is 12345678.  Your phone or computer may complain that there is no internet access with this network, that is correct, allow it.  Then open a web browser and point it to the IP address 192.168.1.1 if using the network created by SoftRF.  If using an ambient network, check the fourth (or fifth) page on the OLED for the IP address assigned to the SoftRF device by the network - click the button to progress through the pages.  With the right IP address, the browser will connect to the mini web server built into SoftRF, allowing one to view SoftRF status info, see whether the user settings have been restored, change settings, or update the firmware via WiFi.  This feature is NOT available on the T-Echo since it does not support WiFi.
+After startup, SoftRF on a T-Beam tries to connect to the WiFi network specified in the settings (if both an SSID and a password were specified).  If a connection is not successful (in 10 seconds), it creates its own Wifi network.  Use a computer, tablet, or smartphone to connect to the network.  If using an ambient network, connect to it as normal.  Otherwise, the network SoftRF creates is named SoftRF-xxxxxx where xxxxxx is the device id.  The device ID may differ from the aircraft ID shown on the OLED - check the fourth (or fifth) page on the OLED for the SSID.  Or, you can specify the name for the network SoftRF creates in the "myssid" setting.  Either way, the password is 12345678.  Your phone or computer may complain that there is no internet access with this network, that is correct, allow it.  Then open a web browser and point it to the IP address 192.168.1.1 if using the network created by SoftRF.  If using the Chrome browser, it may refuse to connect unless you explicitly use "http://192.168.1.1" (not "https"), and dismiss warnings about "no internet access", "insecure", etc.  If using an ambient network, check the fourth (or fifth) page on the T-Beam's OLED display for the IP address assigned to the SoftRF device by the network - click the button to progress through the pages.  With the right IP address, the browser will connect to the mini web server built into SoftRF, allowing one to view SoftRF status info, see whether the user settings have been restored, change settings, or update the firmware via WiFi.  This feature is NOT available on the T-Echo since it does not support WiFi.
 
 After connecting to the web interface, the home page seen is the SoftRF Status page.  It shows some information, and offers buttons for launching several operations, such as viewing and changing settings, firmware update, downloading flight logs, etc.  The web interface has been revised in version MB153 to be less cluttered and more intuitive.
 
@@ -230,7 +230,7 @@ But that tool does not offer the "Latest" alarm trigger method as a choice.  And
 
 Another method is to connect the T-Echo (or T-Beam, for that matter) via a USB cable to a computer with has a "terminal" program that can access the USB port as if it was a serial port.  Alternatively, use a Bluetooth terminal app.  Then look up the "Settings via NMEA" section in the "under the hood" document.
 
-A NEW and much better method is now available, and works for the T-Echo, M1, M3 and T1000-E: use the fantastic web page by Vlad Belayev (can be downloaded and used off-line too, at least via Bluetooth):  https://ogn.helioho.st/mysoftrf/  - it connects to the device via Bluetooth LE, shows device status and settings (and traffic), and allows an easy way to change the settings.  It is still under development, and may also allow connection via USB instead of Bluetooth.  Turn on Bluetooth on your phone (or laptop), but do not "pair" the phone with the SoftRF device.  Instead, click "connect" in that web page, and select the SoftRF device in the list it shows.
+A NEW and much better method is now available, and works for the T-Echo, M1, M3 and T1000-E: use the fantastic web page by Vlad Belayev (can be downloaded and used off-line too, at least via Bluetooth):  https://ogn.helioho.st/mysoftrf/  Open it in a browser that supports Web-BLE, e.g., Chrome or Edge, on a laptop or phone.  It connects to the device via Bluetooth LE, shows device status and settings (and traffic), and allows an easy way to change the settings.  It also allows connection via USB instead of Bluetooth (on some systems).  Turn on Bluetooth on your phone (or laptop), but do not "pair" the phone with the SoftRF device.  Instead, tap "BLE" (or "USB") in that web page, and select the SoftRF device in the list it shows.  This tool is still under development, so check back.  To use off-line on Android, tap the file in a file manager app and ask to open it in Chrome.  Chrome does not allow entering (nor bookmarking) the URL.  Tip: CX File Explorer allows adding a shortcut to the file to its home page.
 
 
 Description of the basic settings:
@@ -623,15 +623,15 @@ These devices include a "bootloader" which makes it easy to update the firmware:
 * Download an appropriate version of SoftRF firmware, from here:
 https://github.com/moshe-braner/SoftRF/tree/master/software/firmware/binaries/nRF52840/SoftRF/MassStorage
 * Unzip the file and make sure you now have a .uf2 file.
-* Connect the SoftRF Badge Edition (T-Echo) device to your PC by means of a USB cable (Type-A <-> Type-C)
+* Connect the SoftRF device to your PC by means of a USB cable
 * Enter "DFU mode", using the procedure that fits your device:
     - on the T-Echo or M1, double click (two clicks within 0.5 seconds) the RESET button
     - on the M3, press and hold the button for close to 20 seconds
-    - on the T1000-E, flip the magnetic USB connector twice holding the button pressed
+    - on the T1000-E, flip the magnetic USB connector twice while holding the button pressed
          (see short video here: https://github.com/lyusupov/SoftRF/wiki/Card-Edition.-Quick-start )
     - or, for any of these devices, connect from https://ogn.helioho.st/mysoftrf/ and click "update firmware"
 * A virtual mass storage device labeled TECHOBOOT, T1000-E or ThinknodeM1/3 will then appear in your computer.
-* Drag the .uf2 firmware file by your pointing device (mouse, touchpad,...) and drop it into the window showing the virtual drive contents.
+* Drag the .uf2 firmware file and drop it into the window showing the virtual drive contents.
 * Wait until the file transfer is complete, it takes about 30 seconds.  The window will disappear and the device will normally reboot itself.
 
 See similar instructions here:
