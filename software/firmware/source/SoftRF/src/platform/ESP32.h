@@ -196,8 +196,9 @@ extern Adafruit_NeoPixel strip;
 // SX1276 RESET
 #define SOC_GPIO_PIN_TBEAM_RF_RST_V02   SOC_UNUSED_PIN
 #define SOC_GPIO_PIN_TBEAM_RF_RST_V05   23
-// SX1262 BUSY
+// SX1262 on T-Beam v1.2
 #define SOC_GPIO_PIN_TBEAM_RF_BUSY_V08  32
+#define SOC_GPIO_PIN_TBEAM_RF_DIO1_V08  33
 // 1st I2C bus on the T-Beam
 #define SOC_GPIO_PIN_TBEAM_SDA          13
 #define SOC_GPIO_PIN_TBEAM_SCL          2
@@ -453,7 +454,7 @@ struct rst_info {
 //#define EXCLUDE_GNSS_AT65     /* 'fake Neo-6/8' on some 2018 T-Beam boards */
 #define EXCLUDE_GNSS_SONY
 #define EXCLUDE_GNSS_MTK
-
+#define EXCLUDE_GNSS_AG33
 
 #define EXCLUDE_CC13XX
 //#define EXCLUDE_SOFTRF_HEARTBEAT
@@ -461,7 +462,11 @@ struct rst_info {
 //#define EXCLUDE_IMU
 
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32S3)
-#define EXCLUDE_UATM
+#define EXCLUDE_NRF905           //  -    kb
+//#define EXCLUDE_MAVLINK          //  -    kb
+#define EXCLUDE_UATM             //  -    kb
+#define EXCLUDE_UAT978           //  -    kb
+//#define EXCLUDE_D1090            //  -    kb
 #else
 //#if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3)
 #define EXCLUDE_NRF905

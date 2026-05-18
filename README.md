@@ -9,23 +9,20 @@ DIY, multifunctional, compatible, sub-1 GHz ISM band radio based proximity aware
 
 ### Latest major additions:
 
+* vMB202: using RadioLib, now supports the Sensecap T1000-E and Thinknode M3 (& M1)
 * vMB179: added FANET id_method, auto-region by default, buzz at first GNSS fix
-* vMB178: relay FLARM traffic (in ADS-L protocol), ADS-B with no-track bit set
 * vMB174: dual-protocol FANET (or P3I) plus FLARM (or ADS-L) modes
 * vMB172: dual-protocol FLARM/ADS-L reception, some relaying in ADS-L protocol
 * vMB171: revised relaying of ADS-B traffic, including "relay only" mode 
 * vMB166: added the ADS-L protocol
-* vMB162: overwrite oldest flight log if space tight
 * vMB160: setting to control the time traffic not-heard-from is reported
 * vMB159: capability to periodically transmit in an alternate protocol
 * vMB155: collect statistics on reception range by relative direction 
 * vMB153: record compressed flight logs in flash memory (T-Beam & T-Echo)
 * vMB152: settings stored in an editable text file
-* vMB140: supports adding an SD card and writing flight logs on the T-Beam
 * vMB138: supports using add-on GNSS modules, on the T-Beam
 * vMB130: supports the GNS5892R ADS-B receiver module, on the T-Beam
 * vMB120: supports the latest 2024 radio protocol
-* vMB114: import traffic data in GDL90 format (from ADS-B receiver)
 * vMB110: added second serial port and data bridging (only on T-Beam)
 
 ### Beyond Lyusupov's version:
@@ -55,7 +52,7 @@ DIY, multifunctional, compatible, sub-1 GHz ISM band radio based proximity aware
 
 ### What is here:
 
-Source code, and compiled binaries for [ESP32](https://github.com/moshe-braner/SoftRF/tree/master/software/firmware/binaries/ESP32/SoftRF) and [nRF52](https://github.com/moshe-braner/SoftRF/tree/master/software/firmware/binaries/nRF52840/SoftRF/MassStorage) (only).
+Source code, and compiled binaries for [ESP32 (T-Beam)](https://github.com/moshe-braner/SoftRF/tree/master/software/firmware/binaries/ESP32/SoftRF) and [nRF52 (T-Echo, M1, M3 & T1000-E)](https://github.com/moshe-braner/SoftRF/tree/master/software/firmware/binaries/nRF52840/SoftRF/MassStorage) (only).  Note: a new T1000-E requires [downgrading the bootloader](https://raw.githubusercontent.com/moshe-braner/SoftRF/refs/heads/master/software/firmware/documentation/SoftRF_MB_user_guide.txt) before loading SoftRF.
 <br>
 <br>
 

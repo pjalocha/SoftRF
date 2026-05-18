@@ -23,7 +23,7 @@
 
 #include "NMEA.h"
 #include "GDL90.h"
-#include "GNS5892.h"
+#include "../radio/ES1090.h"
 #include "../../driver/GNSS.h"
 #include "../../driver/RF.h"
 #include "../../system/SoC.h"
@@ -60,9 +60,10 @@ bool NMEALogOpen = false;
 uint32_t next_SD_sync = 0;
 #endif
 
-uint8_t NMEA_Source = DEST_NONE;   // identifies which port a sentence came from
+uint8_t NMEA_Source = DEST_NONE;     // identifies which port a sentence came from
 
-char NMEABuffer[NMEA_BUFFER_SIZE]; //buffer for NMEA data
+char NMEABuffer[NMEA_BUFFER_SIZE];   //buffer for NMEA data
+char CONFBuffer[NMEA_BUFFER_SIZE];   //buffer for config replies
 char GPGGA_Copy[NMEA_BUFFER_SIZE];   //store last $GGA sentence
 
 //static char NMEA_Callsign[NMEA_CALLSIGN_SIZE];
@@ -584,10 +585,10 @@ void NMEA_setup()
 #endif /* NMEA_TCP_SERVICE */
 
 #if defined(USE_NMEALIB)
-  memset(&nmealib_buf, 0, sizeof(nmealib_buf));
+  memset(&nmealib_buf, '\0', sizeof(nmealib_buf));
 #endif /* USE_NMEALIB */
 
-  memset(GPGGA_Copy, 0, sizeof(GPGGA_Copy));
+  memset(GPGGA_Copy, '\0', sizeof(GPGGA_Copy));
 
   PGRMZ_TimeMarker = millis();
 
@@ -598,7 +599,7 @@ void NMEA_setup()
   sendPFLAV(true);
 }
 
-void NMEA_Out(uint8_t dest, const char *buf, size_t size, bool nl)
+void NMEA_Out(uint8_t dest, const char *buf, size_t size, bool nl, bool pause)
 {
 #if 0
 if (NMEA_Source != DEST_NONE) {     // only external sources
@@ -613,11 +614,21 @@ if (NMEA_Source != DEST_NONE) {     // only external sources
 }
 #endif
 
-  if (dest == NMEA_Source)          // do not echo NMEA back to its source
-    return;                         // NMEA_Source = DEST_NONE for internal NMEA
+  if (dest == NMEA_Source && ! pause)   // do not echo NMEA back to its source
+    return;                             // NMEA_Source = DEST_NONE for internal NMEA
 
   if (dest == settings->gdl90_in)   // do not send NMEA to GDL90 source
     return;
+
+  // after special (config reply) messages, pause other messages
+  static uint32_t timer = 0;
+  if (pause) {
+      //delay(20);
+      timer = millis();
+  } else {
+      if (millis() < timer + 1000)
+          return;
+  }
 
   switch (dest)
   {
@@ -678,11 +689,14 @@ if (NMEA_Source != DEST_NONE) {     // only external sources
   case DEST_USB:
     {
       if (NMEA_Source == DEST_UART)   // do not echo UART to USB
-        return; 
+        return;
+        
       if (SoC->USB_ops) {
         SoC->USB_ops->write((const byte *) buf, size);
         if (nl)
           SoC->USB_ops->write((const byte *) "\r\n", 2);
+        if ( pause && (nl || (size > 2 && buf[size-1]=='\n')))
+          SoC->USB_ops->flushTXD();
       }
     }
     break;
@@ -693,6 +707,13 @@ if (NMEA_Source != DEST_NONE) {     // only external sources
         SoC->Bluetooth_ops->write((const byte *) buf, size);
         if (nl)
           SoC->Bluetooth_ops->write((const byte *) "\r\n", 2);
+#if defined(ARDUINO_ARCH_NRF52)
+        if ( /* pause && */ (nl || (size > 2 && buf[size-1]=='\n')))
+          SoC->Bluetooth_ops->flushTXD();
+#else
+        if ( pause && (nl || (size > 2 && buf[size-1]=='\n')))
+          SoC->Bluetooth_ops->flushTXD();
+#endif
       }
     }
     break;
@@ -797,26 +818,40 @@ void NMEA_bridge_send(char *buf, int len)
 
 #if defined(USE_NMEA_CFG)
     // Also trap PSRF/PSKV config sentences, process internally instead
-    if (buf[1]=='P' && buf[2]=='S') {
+    if (len > 6 && buf[1]=='P' && buf[2]=='S') {
       if ((buf[3]=='R' && buf[4]=='F') || (buf[3]=='K' && buf[4]=='V')) {
+//Serial.print("SKV (len:=");
+//Serial.print(len);
+//Serial.print(") ");
+//Serial.print(buf);
         NMEA_bridge_sent = true;   // not really sent, but substantial processing
         // if checksum is wrong, send it back to the source:
-        if (buf[len-5] == '*') {
-            char c1 = buf[len-4];
-            char c2 = buf[len-3];
-            buf[len-4] = '\0';   // include the '*'
+        char *p = &buf[len-1];
+        if (*p == '\n')  --p;
+        if (*p == '\r')  --p;
+        if (p[-2] == '*') {
+            char c1 = p[-1];
+            char c2 = p[0];
+            p[-1] = '\0';   // keep the '*'
             len = NMEA_add_checksum(buf);
             if (buf[len-4] != c1 || buf[len-3] != c2) {
                 uint8_t dest = NMEA_Source;
                 NMEA_Source = DEST_NONE;
-                NMEA_Out(dest, "\r\n-- correct checksum is: ", 26, false);
-                NMEA_Out(dest, buf, len, true);   // add blank lines before and after
+                delay(100);
+                NMEA_Out(dest, "\r\n-- correct checksum is: ", 26, false, true);
+                NMEA_Out(dest, buf, len, true, true);   // add blank lines before and after
+                //memset(buf, '\0', len);
+                delay(100);
                 NMEA_Source = dest;
                 return;
             }
         }
-        if (NMEA_encode(buf, len))             // valid sentence
+        if (NMEA_encode(buf, len)) {             // valid sentence
             NMEA_Process_SRF_SKV_Sentences();
+        } else {
+            Serial.print("\r\n-- invalid sentence: ");
+            Serial.println(buf);
+        }
         return;                                // even if not valid sentence
       }
     }
@@ -1798,28 +1833,24 @@ void NMEA_GGA()
 // this is used specifically to respond to the source
 // while NMEA_Out() specifically avoids that,
 // so mask the source
-void nmea_cfg_reply(bool blanklines=true)
+void nmea_cfg_reply(bool blanklines=true, char *buf=CONFBuffer)
 {
-    unsigned int nmealen = NMEA_add_checksum();
+    unsigned int nmealen = NMEA_add_checksum(buf);
     uint8_t dest = NMEA_Source;
     NMEA_Source = DEST_NONE;
     if (blanklines)
-        NMEA_Out(dest, "\r\n", 2, false);
-    NMEA_Out(dest, NMEABuffer, nmealen, blanklines);
+        NMEA_Out(dest, "\r\n", 2, false, true);
+    NMEA_Out(dest, buf, nmealen, blanklines, true);
     NMEA_Source = dest;
 }
 
 static void nmea_cfg_restart(bool save_settings)
 {
-  if (save_settings) {
-      //EEPROM_store();
-      save_settings_to_file();   // this also shows the new settings
-  }
+  if (save_settings)
+      save_settings_to_file(true);   // this also shows the new settings
   Serial.println();
   Serial.println(F("Restart is in progress. Please, wait..."));
   Serial.println();
-  SoC->WDT_fini();
-  if (SoC->Bluetooth_ops) { SoC->Bluetooth_ops->fini(); }
   delay(2000);
   reboot();
 }
@@ -1853,7 +1884,6 @@ void tryupdate(TinyGPSCustom &field, int idx)
     char *v  = stgdesc[idx].value;
     int32_t cur_val, cfg_val;
     switch (t) {
-    case STG_HIDDEN:
     case STG_INT1:
     case STG_UINT1:
        cur_val = (t==STG_UINT1? (*(uint8_t*)v) : (*(int8_t*)v));
@@ -1899,14 +1929,14 @@ void tryupdate(TinyGPSCustom &field, int idx)
        }
        break;
     }
-    if (t==STG_INT1 || t==STG_UINT1 || t==STG_HIDDEN) {
-      snprintf_P(NMEABuffer, sizeof(NMEABuffer),
+    if (t==STG_INT1 || t==STG_UINT1) {
+      snprintf_P(CONFBuffer, sizeof(CONFBuffer),
         PSTR("%s %s %d\r\n"), label, msg, (int) cfg_val);
-    } else if (t==STG_HEX2 || t==STG_HEX6) {
-      snprintf_P(NMEABuffer, sizeof(NMEABuffer),
+    } else if (t==STG_HEX2 || t==STG_HEX6 || t==STG_HEX8) {
+      snprintf_P(CONFBuffer, sizeof(CONFBuffer),
         PSTR("%s %s %X\r\n"), label, msg, cfg_val);
     } else if (t > STG_VOID) {
-      snprintf_P(NMEABuffer, sizeof(NMEABuffer),
+      snprintf_P(CONFBuffer, sizeof(CONFBuffer),
         PSTR("%s %s %s\r\n"), label, msg, (char*)v);
     }
     nmea_cfg_reply();   // no '*' and thus checksum will not be added
@@ -1924,12 +1954,25 @@ void NMEA_Process_SRF_SKV_Sentences()
       } else if (strncmp(C_Version.value(), "SAV", 3) == 0) {      // $PSRFC,SAV*3C
           Serial.println(F("PSRFC Save & Reboot..."));
           nmea_cfg_restart(true);
-          // save settings to EEPROM and reboot
-
+          // save settings and reboot
+#if defined(INCLUDE_EEPROM)
+      } else if (strncmp(C_Version.value(), "EEP", 3) == 0) {      // $PSRFC,EEP*28
+        if (FS_is_mounted==true && use_eeprom==false) {
+          Serial.println(F("PSRFC Back up settings to EEPROM..."));
+          save_settings_to_EEPROM(true);   // do not reboot
+        } else {
+          Serial.println(F("Settings already are in EEPROM"));
+        }
+#endif
       } else if (strncmp(C_Version.value(), "OFF", 3) == 0) {      // $PSRFC,OFF*37
           Serial.println(F("PSRFC Shutdown..."));
           shutdown(SOFTRF_SHUTDOWN_NMEA);
-
+#if defined(ARDUINO_ARCH_NRF52)
+      } else if (strncmp(C_Version.value(), "DFU", 3) == 0) {      // $PSRFC,DFU*2F
+          Serial.println(F("Enter DFU mode..."));
+          enterUf2Dfu();
+          // enter DFU mode so can drag and drop new firmware UF2 file
+#endif
 #if defined(USE_OLED)
       } else if (strncmp(C_Version.value(), "PAG", 3) == 0) {      // $PSRFC,PAG*2E
           Serial.println(F("PSRFC Page Switch"));
@@ -1957,7 +2000,7 @@ void NMEA_Process_SRF_SKV_Sentences()
 
       } else if (strncmp(C_Version.value(), "?", 1) == 0) {        // $PSRFC,?*47
 
-          snprintf_P(NMEABuffer, sizeof(NMEABuffer),
+          snprintf_P(CONFBuffer, sizeof(CONFBuffer),
             PSTR("$PSRFC,%d,%d,%d,%d,%d,%d,%d,%d,%d,%X,%X,%X,%X,%d,%d,%d,%d,%d,%d*"),
             PSRFX_VERSION,      settings->mode,      settings->rf_protocol,
             settings->band,     settings->acft_type, settings->alarm,
@@ -2005,7 +2048,7 @@ void NMEA_Process_SRF_SKV_Sentences()
       if (strncmp(D_Version.value(), "?", 1) == 0) {
 
           //char psrfd_buf[MAX_PSRFD_LEN];
-          snprintf_P(NMEABuffer, sizeof(NMEABuffer),
+          snprintf_P(CONFBuffer, sizeof(CONFBuffer),
             PSTR("$PSRFD,%d,%d,%06X,%06X,%06X,%d,%d,%X,%02X,%d,%X,%X,%X,%X,%X,%d,%d,%d,%d,%X,%X,%d,%d,%d*"),
             PSRFX_VERSION,         settings->id_method,  settings->aircraft_id,
             settings->ignore_id,   settings->follow_id,  settings->baud_rate,
@@ -2063,7 +2106,7 @@ void NMEA_Process_SRF_SKV_Sentences()
 
       if (strncmp(F_Version.value(), "?", 1) == 0) {           // $PSRFF,?*42
         //char psrff_buf[MAX_PSRFF_LEN];
-        snprintf_P(NMEABuffer, sizeof(NMEABuffer),
+        snprintf_P(CONFBuffer, sizeof(CONFBuffer),
           PSTR("$PSRFF,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d*"),
           PSRFX_VERSION,         settings->rx1090,      settings->rx1090x,
           settings->mode_s,      settings->gdl90_in,    settings->gnss_pins,
@@ -2103,74 +2146,86 @@ void NMEA_Process_SRF_SKV_Sentences()
 
   // one setting at a time
   if (S_Version.isUpdated()) {
-
-    char version0 = *S_Version.value();
-    char label0 = 0xFF;
+//Serial.println("S_Version");
+    char version = *S_Version.value();
+    const char *label = "";
     if (S_label.isUpdated())
-        label0 = *S_label.value();
+        label = S_label.value();
 
-    if (version0 == '?' || label0 == '?') {   // treat $PSRFS,0,?*xx same as $PSRFS,?*xx
+    if (version == '?' || label[0] == '?') {   // treat $PSRFS,0,?*xx same as $PSRFS,?*57
       // reply in the same format as the settings file, including comments
+      delay(20);
+      snprintf_P(CONFBuffer, sizeof(CONFBuffer), PSTR("settings loaded from: %s"),
+         settings_used==STG_FILE? "file" : settings_used==STG_EEPROM? "EEPROM" : "defaults");
+      nmea_cfg_reply(true);
+      delay(20);
       for (int i=STG_MODE; i<STG_END; i++) {
-         if (format_setting(i, true) == false)
+         if (hidden_setting(i))
+               continue;
+         if (format_setting(i, true, false, CONFBuffer, sizeof(CONFBuffer)) == false)
                continue;
          nmea_cfg_reply(false);  // do not add blank lines between the settings
-         yield();
+         delay(20);
       }
 
-    } else if (isdecdigit(&version0)) {
+    } else if (isdecdigit(&version)) {
 
-      int i = STG_NONE;
-      if (label0 != 0xFF && label0 != '\0')
-          i = find_setting(S_label.value());
-      if (i == STG_NONE) {
-        snprintf_P(NMEABuffer, sizeof(NMEABuffer),
-            PSTR("%s - no matching label\r\n"), S_label.value());
+      int i = STG_VERSION;
+      if (label[0] != '\0')
+          i = find_setting(label);
+      if (i == STG_END) {
+        snprintf_P(CONFBuffer, sizeof(CONFBuffer),
+            PSTR("%s - no matching label\r\n"), label);
         nmea_cfg_reply();
 
       } else {    // label matches a setting
 
+        static bool any_change = false;
         bool query = true;      // treat $PSRFS,0,label*xx same as $PSRFS,0,label,?*xx
-        cfg_is_updated = true;  // for non-UINT1 settings assume it's a change
+        cfg_is_updated = true;  // for non-INT1 or UINT1 settings assume it's a change
         bool loaded = false;
-        if (S_value.isUpdated())
-            query = (*S_value.value() == '?');
+        bool value_updated = S_value.isUpdated();
+        const char *value = "";
+        if (value_updated) {
+            value = S_value.value();
+            query = (*value == '?');
+        }
+//Serial.printf("psrfs query:|%s|%s|\r\n", label, value);
         if (! query) {
-            if (stgdesc[i].type == STG_UINT1)
-                cfg_is_updated = (*((uint8_t *)(stgdesc[i].value)) != atoi(S_value.value()));
-            else if (stgdesc[i].type == STG_INT1 || stgdesc[i].type == STG_HIDDEN)
-                cfg_is_updated = (*((int8_t *)(stgdesc[i].value)) != atoi(S_value.value()));
-            if (cfg_is_updated)
-                loaded = load_setting(i, S_value.value());
+            if (i == STG_MODE)
+                cfg_is_updated = true;
+            else if (stgdesc[i].type == STG_UINT1)
+                cfg_is_updated = (*((uint8_t *)(stgdesc[i].value)) != atoi(value));
+            else if (stgdesc[i].type == STG_INT1)
+                cfg_is_updated = (*((int8_t *)(stgdesc[i].value)) != atoi(value));
+            if (cfg_is_updated) {
+                loaded = load_setting(i, value);
+                if (loaded)
+                    any_change = true;
+            }
         }
 
         if (!query && cfg_is_updated && !loaded) {
-          snprintf_P(NMEABuffer, sizeof(NMEABuffer),
-                  PSTR("%s,%s - error\r\n"), S_label.value(), S_value.value());
+          snprintf_P(CONFBuffer, sizeof(CONFBuffer),
+                  PSTR("%s,%s - error\r\n"), label, value);
           nmea_cfg_reply();
 
         } else {   // if (query || loaded)
 
           // reply with a complete $PSRFS sentence (and no setting comment)
-          if (format_setting(i, false) == true) {
-              char buf[sizeof(NMEABuffer)+9];
-              strcpy(buf, "$PSRFS,");
-              if (loaded)
-                  buf[7] = version0;      // digit given after $PSRFS,
-              else
-                  buf[7] = '0';           // signals no change
-              buf[8] = ',';
-              strcpy(buf+9, NMEABuffer);  // format_setting() put its output in NMEABuffer
-              int len = strlen(buf);
-              buf[len-2] = '*';       // overwrite the \r\n from format_setting()
-              buf[len-1] = '\0';
-              strcpy(NMEABuffer, buf);
-              nmea_cfg_reply();           // will output what's now in NMEABuffer
+          strcpy(CONFBuffer, "$PSRFS,0,");
+          if (loaded)
+              CONFBuffer[7] = version;       // digit given after $PSRFS,
+          if (format_setting(i, false, false, &CONFBuffer[9], sizeof(CONFBuffer)-9)) {
+              int len = strlen(CONFBuffer);
+              CONFBuffer[len-2] = '*';       // overwrite the \r\n from format_setting()
+              CONFBuffer[len-1] = '\0';
+              nmea_cfg_reply();
           }
 
-          // only restart if Version field is nonzero
-          if ( /* loaded && */ version0 != '0')
-              nmea_cfg_restart(true);
+          // only restart if Version field is 1
+          if ( !query /* && loaded */ && version == '1')
+              nmea_cfg_restart(any_change);
         }
       }
     }
@@ -2182,8 +2237,8 @@ void NMEA_Process_SRF_SKV_Sentences()
 
       char tval = T_testmode.value()[0];
       if (tval == '?') {
-          snprintf_P(NMEABuffer, sizeof(NMEABuffer), PSTR("$PSRFT,%d,%06X*"),
-                test_mode, (SoC->getChipId() & 0x00FFFFFF));
+          snprintf_P(CONFBuffer, sizeof(CONFBuffer), PSTR("$PSRFT,%d,%08X,%06X*"),
+                test_mode, settings->debug_flags, (SoC->getChipId() & 0x00FFFFFF));
           nmea_cfg_reply();
           // put custom code here for debugging, for example:
 #if defined(ESP32)
@@ -2193,10 +2248,18 @@ void NMEA_Process_SRF_SKV_Sentences()
       } else {
           if (tval == '0')
               test_mode = false;
-          else if (tval == '1')
+          if (tval == '1')
               test_mode = true;
-          else
+          if (tval == '!')
               test_mode = !test_mode;
+          if (tval == '+') {
+              settings->debug_flags = 0xFFFFFFFF;
+              Serial.println("Debug flags set");
+          }
+          if (tval == '-') {
+              settings->debug_flags = 0;
+              Serial.println("Debug flags cleared");
+          }
           if (test_mode) {
 #if defined(ESP32)
               OLED_msg("TEST",   " MODE");
@@ -2217,7 +2280,7 @@ void NMEA_Process_SRF_SKV_Sentences()
 
       if (strncmp(K_Version.value(), "?", 1) == 0) {
 
-        snprintf_P(NMEABuffer, sizeof(NMEABuffer),
+        snprintf_P(CONFBuffer, sizeof(CONFBuffer),
             PSTR("$PSRFK,%d,%08X%08X%08X%08X*"),
             PSRFX_VERSION,
             settings->igc_key[0]? 0x88888888 : 0,
@@ -2262,27 +2325,13 @@ void NMEA_Process_SRF_SKV_Sentences()
 
       if (strncmp(V_Version.value(), "?", 1) == 0) {
 
-#if 1 // defined(ABANDON_EEPROM)
-          snprintf_P(NMEABuffer, sizeof(NMEABuffer),
+          snprintf_P(CONFBuffer, sizeof(CONFBuffer),
             PSTR("$PSKVC,%d,%d,%d,%d,%d,%d,%d,%d,%d,%X*"),
             PSKVC_VERSION,       settings->units,       settings->zoom,
             settings->rotate,    settings->orientation, settings->adb,
             settings->epdidpref, settings->viewmode,    settings->antighost,
             settings->team);
-#else
-          snprintf_P(NMEABuffer, sizeof(NMEABuffer),
-            PSTR("$PSKVC,%d,%d,%d,%d,%d,%d,%d,%s,%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,%X*"),
-            PSKVC_VERSION,  ui->adapter,      ui->connection,
-            ui->units,      ui->zoom,         ui->protocol,
-            ui->baudrate,   ui->server,       ui->key,
-            ui->rotate,     ui->orientation,  ui->adb,
-            ui->epdidpref,  ui->viewmode,     ui->voice,
-            ui->antighost,  ui->filter,       ui->power_save,
-            ui->team);
-#endif
           nmea_cfg_reply();
-
-#if 1  // defined(ABANDON_EEPROM)
 
       } else if (isdecdigit(V_Version.value())) {
 
@@ -2301,7 +2350,6 @@ void NMEA_Process_SRF_SKV_Sentences()
               nmea_cfg_restart(true);
           else
               NMEA_encode("$PSKVC,0,,,,,,,,,*41\r\n", 22);
-#endif
       }
   }
 #endif /* USE_SKYVIEW_CFG */

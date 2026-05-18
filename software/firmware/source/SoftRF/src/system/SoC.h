@@ -22,18 +22,18 @@
 #define SOC_UNUSED_PIN 255
 
 #include "../../SoftRF.h"
-#include "../platform/ESP8266.h"
+//#include "../platform/ESP8266.h"
 #include "../platform/ESP32.h"
-#include "../platform/RPi.h"
-#include "../platform/CC13XX.h"
-#include "../platform/STM32.h"
-#include "../platform/PSoC4.h"
+//#include "../platform/RPi.h"
+//#include "../platform/CC13XX.h"
+//#include "../platform/STM32.h"
+//#include "../platform/PSoC4.h"
 #include "../platform/nRF52.h"
-#include "../platform/LPC43.h"
-#include "../platform/SAMD.h"
-#include "../platform/AVR.h"
-#include "../platform/ASR66.h"
-#include "../platform/RP2040.h"
+//#include "../platform/LPC43.h"
+//#include "../platform/SAMD.h"
+//#include "../platform/AVR.h"
+//#include "../platform/ASR66.h"
+//#include "../platform/RP2040.h"
 
 typedef struct SoC_ops_struct {
   uint8_t id;
@@ -58,7 +58,7 @@ typedef struct SoC_ops_struct {
   bool (*WiFi_hostname)(String);
   int  (*WiFi_clients_count)();
   bool (*EEPROM_begin)(size_t);
-  void (*EEPROM_extension)(int);
+//  void (*EEPROM_extension)(int);
   void (*SPI_begin)();
   void (*swSer_begin)(unsigned long);
   void (*swSer_enableRx)(boolean);

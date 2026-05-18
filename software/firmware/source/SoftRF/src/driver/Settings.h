@@ -21,6 +21,8 @@
 #define SETTINGS_H
 
 #include "../../SoftRF.h"
+#include "../system/SoC.h"
+#include "../protocol/data/NMEA.h"
 
 //one of the following needs to be defined in SoftRF.h:  (not used any more)
 //#define DEFAULT_REGION_EU
@@ -34,29 +36,41 @@
 //#error Multiple default regions defined
 //#endif
 
-#include "../system/SoC.h"
+#if !defined(ESP32)
+#define INCLUDE_EEPROM
+#endif
 
-#if !defined(EXCLUDE_EEPROM)
+#if defined(INCLUDE_EEPROM)
 #if defined(ENERGIA_ARCH_CC13XX) || defined(ENERGIA_ARCH_CC13X2)
 #include <EEPROM_CC13XX.h>
 #else
 #include <EEPROM.h>
 #endif /* CC13XX or CC13X2 */
-#endif /* EXCLUDE_EEPROM */
+#define SOFTRF_EEPROM_MAGIC  0xFADECABE
+#define EEPROM_SIZE  (768 - 4)
+typedef struct EEPROM_S {
+    uint32_t  magic;
+    char text[EEPROM_SIZE];
+} eeprom_struct_t;
+typedef union EEPROM_U {
+   eeprom_struct_t field;
+   uint8_t raw[sizeof(eeprom_struct_t)];
+} eeprom_t;
+#endif  // INCLUDE_EEPROM
 
-#define SOFTRF_EEPROM_MAGIC   0xBABADEDA
-#define SOFTRF_EEPROM_VERSION 0xACAC0B0D
-#define SOFTRF_SETTINGS_VERSION 1
+#define SOFTRF_SETTINGS_VERSION  1
 
 // the "ui" settings have been appended into "settings"
 #define ui settings
 
+#if 0
 enum
 {
 	EEPROM_EXT_LOAD,
 	EEPROM_EXT_DEFAULTS,
 	EEPROM_EXT_STORE
 };
+#endif
 
 enum
 {
@@ -147,7 +161,6 @@ enum
 };
 
 enum stgidx {
-    STG_NONE,
     STG_VERSION,
     STG_MODE,
     STG_PROTOCOL,
@@ -243,110 +256,38 @@ enum stgidx {
     STG_EPD_AGHOST,
     STG_EPD_TEAM,
 //#endif
+    STG_CALLSIGN,
+    STG_FANET_SOS,
     STG_DEBUG_FLAGS,
     STG_END
 };
 
 enum stgtyp {
     STG_OBSOLETE = -6,   // input-only (to be converted) (data type STG_INT1)
-    STG_HIDDEN = -5,     // not visible in web page (data type STG_INT1)
+    STG_HEX8  = -5,      // 8 hex digits
     STG_HEX6  = -4,      // 6 hex digits
     STG_HEX2  = -3,      // 00..FF
     STG_UINT1 = -2,      // 0..255
     STG_INT1  = -1,      // -128..+127
     STG_VOID  = 0,
-    STG_STR   = 1        // strings' "type" value equals their length
+    STG_STR   = 1        // strings' "type" value actually equals their length
 };
+
+#define STG_HIDDEN   0x7F
+#define STG_SAVEHIDE 0xFF  // hidden but saved to EEPROM
+
+bool hidden_setting(uint8_t index);
 
 struct setting_struct {
     const char *label;
     char *value;
     int8_t type;
+    uint8_t hidden;
 };
-
-typedef struct __attribute__((packed)) PackedSettings {
-
-    uint8_t  mode:4;            // do not move
-    uint8_t  rf_protocol:4;     // do not move
-    uint8_t  band:4;            // do not move
-    uint8_t  txpower:2;         // do not move
-    uint8_t  volume:2;
-    uint8_t  acft_type;         // can be reduced to 5 bits (not 4!)
-
-    uint8_t  geoid:7;
-    bool     resvd1:1;
-
-    bool     nmea_g:1;       // do not move
-    bool     nmea_p:1;
-    bool     nmea_t:1;
-    bool     nmea_s:1;
-    bool     nmea_d:1;
-    uint8_t  nmea_out:3;     // do not move
-
-    uint8_t  bluetooth:3; // ESP32 built-in Bluetooth  // do not move
-    uint8_t  alarm:3;        // do not move
-    bool     stealth:1;      // do not move
-    bool     no_track:1;     // do not move
-
-    uint8_t  gdl90:3;      // output destination
-    uint8_t  d1090:3;
-    uint8_t  json:1;       // was 2 bits
-    bool     resvd2:1;
-
-    uint8_t  pointer:2;
-    uint8_t  power_save:2;
-    uint8_t  power_ext:1;    /* if nonzero, shuts down if battery is not full */
-    uint8_t  rx1090:2;       // attached ADS-B receiver module    // do not move
-    uint8_t  mode_s:1;
-
-    uint8_t  gnss_pins:2;    // external GNSS added to T-Beam     // do not move
-    uint8_t  sd_card:2;      // gpio pins for SD card adapter
-    uint8_t  logflight:2;
-    uint8_t  loginterval:2;
-
-    int8_t   freq_corr; /* +/-, kHz */   // <<< limited to +-30, so can liberate two bits
-    uint8_t  relay:2;
-    uint8_t  gdl90_in:3;    // data from this port will be interpreted as GDL90
-    uint8_t  alt_udp:1;     // if 1 then use 10111 instead of 10110
-    bool     nmea_e:1;
-    bool     nmea2_e:1;     // whether to send bridged data
-    uint8_t  baud_rate:3;   // for serial UART0    // do not move
-    uint8_t  baudrate2:3;   // for aux UART2       // do not move
-    bool     invert2:1;     // whether to invert the logic levels on UART2
-    bool     altpin0:1;     // whether to use a different pin for UART0 RX
-
-    /* encryption key provided by gliding contest organizer */
-    uint32_t igc_key[4];
-
-    /* added to allow setting aircraft ID and also an ID to ignore */
-    uint32_t aircraft_id:24;  // do not move
-    uint8_t  id_method:2;     // device ID, ICAO ID, or random    // do not move
-    uint8_t  debug_flags:6;   /* each bit activates output of some debug info */
-    uint32_t ignore_id:24;    // do not move
-    uint8_t  strobe:2;
-    bool    logalarms:1;
-    uint8_t  voice:2;
-    uint8_t  tcpport:1;       // 0=2000, 1=8880   // do not move
-    uint8_t  tcpmode:1;       // do not move
-    bool     ppswire:1;       // whether PPS wire added  // do not move
-    uint32_t follow_id:24;    // do not move
-
-    bool     nmea2_g:1;       // do not move
-    bool     nmea2_p:1;
-    bool     nmea2_t:1;
-    bool     nmea2_s:1;
-    bool     nmea2_d:1;
-    uint8_t  nmea_out2:3;     // second NMEA output route    // do not move
-
-    char    ssid[19];         // do not move
-    char    psk[17];
-    char    host_ip[16];
-
-} settingb_t;
 
 typedef struct Settings {
 
-    int8_t   version;
+    uint8_t  version;
     uint8_t  mode;
     uint8_t  rf_protocol;
     uint8_t  altprotocol;
@@ -357,7 +298,7 @@ typedef struct Settings {
     uint8_t  hrange;
     uint8_t  vrange;
     int8_t   old_txpwr;  // int not uint to allow making it "obsolete".
-    int8_t   txpower;    // int not uint to allow making it "hidden".
+    int8_t   txpower;    // int to allow minmax
     uint8_t  id_method;
     uint32_t aircraft_id;
     uint32_t ignore_id;
@@ -386,12 +327,12 @@ typedef struct Settings {
     uint8_t  gdl90;         // output destination
     uint8_t  d1090;
     //uint8_t  json;
-    int8_t   gn_to_gp;
+    uint8_t  gn_to_gp;
     int8_t   geoid;
     int8_t   leapsecs;
     int8_t   freq_corr; /* +/-, kHz */   // <<< limited to +-30
     uint8_t  relay;
-    int8_t   expire;
+    int8_t   expire;        // int to allow minmax
     bool     pflaa_cs;
     bool     logalarms;
     uint32_t debug_flags;   /* each bit activates output of some debug info */
@@ -410,7 +351,7 @@ typedef struct Settings {
     uint8_t  power_ext;   /* if nonzero, shuts down if battery is not full */
     uint8_t  rx1090;
     uint8_t  rx1090x;     // settings for the ADS-B receiver module
-    int8_t   mode_s;      // 0=off, 1-9="gain"
+    int8_t  mode_s;       // 0=off, 1-9="gain"  - int to allow minmax
     uint8_t  hrange1090;  // km
     uint8_t  vrange1090;  // hundreds of meters
     uint8_t  gdl90_in;    // data from this port will be interpreted as GDL90
@@ -444,20 +385,10 @@ typedef struct Settings {
     uint8_t  antighost;
     uint32_t team;
 //#endif
+    char     callsign[33];
+    uint8_t  fanet_sos;
 
 } settings_t;
-
-typedef struct EEPROM_S {
-    uint32_t  magic;
-    uint32_t  version;
-    settingb_t settings;
-    uint32_t  version2;    // guard from both ends
-} eeprom_struct_t;
-
-typedef union EEPROM_U {
-   eeprom_struct_t field;
-   uint8_t raw[sizeof(eeprom_struct_t)];
-} eeprom_t;
 
 // bitfields
 
@@ -521,13 +452,14 @@ typedef union EEPROM_U {
 
 void Adjust_Settings(void);
 void Settings_setup(void);
-void Settings_defaults(bool keepsome);
-void EEPROM_store(void);
-int  find_setting(const char *label);
+void Settings_defaults();
+int  find_setting(const char *label, bool shorthand=false);
 bool load_setting(const int index, const char *value);
-bool format_setting(const int index, const bool comment, char *buf=NULL, size_t size=0);
+bool load_settings(void);
+bool format_setting(const int index, const bool comment=true, bool shorthand=false, char *buf=CONFBuffer, size_t size=sizeof(CONFBuffer));
 void show_settings_serial(void);
-void save_settings_to_file(void);
+void save_settings_to_file(bool reboot);
+void save_settings_to_EEPROM(bool inclusive=false);
 bool load_settings_from_file(void);
 const char *settings_message(const char *msg=NULL, const char *submsg=NULL, const int val=0);
 void do_test_mode(void);
@@ -542,6 +474,7 @@ extern uint8_t settings_used;
 extern settings_t *settings;
 extern setting_struct stgdesc[STG_END];
 extern const char * stgcomment[STG_END];
+extern bool use_eeprom;
 extern uint32_t baudrates[];
 extern bool do_alarm_demo;
 extern bool test_mode;

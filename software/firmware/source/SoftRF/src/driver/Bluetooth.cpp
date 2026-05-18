@@ -444,6 +444,12 @@ static size_t ESP32_Bluetooth_write(const uint8_t *buffer, size_t size)
   return rval;
 }
 
+static void ESP32_Bluetooth_flushTXD()
+{
+    if (SerialBT)
+        SerialBT.flush();
+}
+
 IODev_ops_t ESP32_Bluetooth_ops = {
   "ESP32 Bluetooth",
   ESP32_Bluetooth_setup,
@@ -451,7 +457,8 @@ IODev_ops_t ESP32_Bluetooth_ops = {
   ESP32_Bluetooth_fini,
   ESP32_Bluetooth_available,
   ESP32_Bluetooth_read,
-  ESP32_Bluetooth_write
+  ESP32_Bluetooth_write,
+  ESP32_Bluetooth_flushTXD
 };
 
 #if defined(ENABLE_BT_VOICE)
@@ -1360,7 +1367,7 @@ void startAdv(void)
     Bluefruit.Advertising.addTxPower();
 
 #if defined(USE_BLE_MIDI)
-    if (settings->volume < BUZZER_OFF) {
+    if (settings->volume != BUZZER_OFF) {
       Bluefruit.Advertising.addService(blemidi, bleuart_HM10);
     } else
 #endif /* USE_BLE_MIDI */
@@ -1442,10 +1449,15 @@ void nRF52_Bluetooth_setup()
       BT_name += String(SoC->getChipId() & 0x00FFFFFFU, HEX);
   }
 
+#if 0
   // Setup the BLE LED to be enabled on CONNECT
   // Note: This is actually the default behavior, but provided
   // here in case you want to control this LED manually via PIN 19
-  Bluefruit.autoConnLed(LED_BLUE == SOC_GPIO_LED_BLE ? true : false);
+  if (hw_info.model == SOFTRF_MODEL_BADGE)
+      Bluefruit.autoConnLed(LED_BLUE == SOC_GPIO_LED_BLE ? true : false);
+  else
+#endif
+      Bluefruit.autoConnLed(false);
 
   // Config the peripheral connection with maximum bandwidth
   // more SRAM required by SoftDevice
@@ -1509,34 +1521,6 @@ void nRF52_Bluetooth_setup()
  End of Adafruit licensed text
 *********************************************************************/
 
-static void nRF52_Bluetooth_loop()
-{
-  // notify changed value
-  // bluetooth stack will go into congestion, if too many packets are sent
-  if ( Bluefruit.connected()              &&
-       bleuart_HM10.notifyEnabled()       &&
-       (millis() - BLE_Notify_TimeMarker > 10)) { /* < 18000 baud */
-    bleuart_HM10.flushTXD();
-
-    BLE_Notify_TimeMarker = millis();
-  }
-
-#if defined(BLE_SENSORS)
-  if (isTimeToBattery()) {
-    blebas.write(Battery_charge());
-  }
-
-  if (Bluefruit.connected() && isTimeToSensBox()) {
-    uint8_t sens_status = isValidFix() ? GNSS_STATUS_3D_MOVING : GNSS_STATUS_NONE;
-    blesens.notify_nav (sens_status);
-    blesens.notify_move(sens_status);
-    blesens.notify_gps2(sens_status);
-    blesens.notify_sys (sens_status);
-    BLE_SensBox_TimeMarker = millis();
-  }
-#endif
-}
-
 static void nRF52_Bluetooth_fini()
 {
   BTactive = false;   // until next reboot
@@ -1587,6 +1571,63 @@ static int nRF52_Bluetooth_available()
   return rval;
 }
 
+
+#define POWER_SAVING_BT_CHECK    60000UL /* 1 minute */
+#define POWER_SAVING_BT_TIMEOUT 600000UL /* 10 minutes */
+
+static uint32_t BT_Active_Time_ms = 0;
+
+static void nRF52_Bluetooth_loop()
+{
+  if (! BTactive)
+      return;
+
+  if (settings->power_save & POWER_SAVE_BT) {
+
+      if ((millis() - BT_Active_Time_ms) > POWER_SAVING_BT_CHECK) {
+          if (Bluefruit.connected())
+              BT_Active_Time_ms = millis();
+      }
+      if ((millis() - BT_Active_Time_ms) > POWER_SAVING_BT_TIMEOUT) {
+          nRF52_Bluetooth_fini();
+          Serial.println(F("$PSRFS,BT_OFF"));
+          return;
+      }
+  }
+
+  // notify changed value
+  // bluetooth stack will go into congestion, if too many packets are sent
+  if ( Bluefruit.connected() &&
+           (millis() - BLE_Notify_TimeMarker > 10)) { /* < 18000 baud */
+
+    if (bleuart_HM10.notifyEnabled())
+        bleuart_HM10.flushTXD();
+
+#if !defined(EXCLUDE_NUS)
+    if (bleuart_NUS.notifyEnabled())
+        bleuart_NUS.flushTXD();
+#endif /* EXCLUDE_NUS */
+
+    BLE_Notify_TimeMarker = millis();
+  }
+
+#if defined(BLE_SENSORS)
+  if (isTimeToBattery()) {
+    blebas.write(Battery_charge());
+  }
+
+  if (Bluefruit.connected() && isTimeToSensBox()) {
+    uint8_t sens_status = isValidFix() ? GNSS_STATUS_3D_MOVING : GNSS_STATUS_NONE;
+    blesens.notify_nav (sens_status);
+    blesens.notify_move(sens_status);
+    blesens.notify_gps2(sens_status);
+    blesens.notify_sys (sens_status);
+    BLE_SensBox_TimeMarker = millis();
+  }
+#endif
+}
+
+
 static int nRF52_Bluetooth_read()
 {
   int rval = -1;
@@ -1631,6 +1672,18 @@ static size_t nRF52_Bluetooth_write(const uint8_t *buffer, size_t size)
   return rval;
 }
 
+static void nRF52_Bluetooth_flushTXD()
+{
+  if ( bleuart_HM10.notifyEnabled() ) {
+      bleuart_HM10.flushTXD();
+      delay(5);
+  }
+  if ( bleuart_NUS.notifyEnabled() ) {
+      bleuart_NUS.flushTXD();
+      delay(5);
+  }
+}
+
 IODev_ops_t nRF52_Bluetooth_ops = {
   "nRF52 Bluetooth",
   nRF52_Bluetooth_setup,
@@ -1638,7 +1691,8 @@ IODev_ops_t nRF52_Bluetooth_ops = {
   nRF52_Bluetooth_fini,
   nRF52_Bluetooth_available,
   nRF52_Bluetooth_read,
-  nRF52_Bluetooth_write
+  nRF52_Bluetooth_write,
+  nRF52_Bluetooth_flushTXD
 };
 
 #endif /* ESP32 or ARDUINO_ARCH_NRF52 */

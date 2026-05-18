@@ -42,6 +42,10 @@
 #endif
 #endif
 
+#if defined(USE_EPAPER)
+#include "driver/EPD.h"
+#endif
+
 #if defined(FILESYS)
 //#include "SPIFFS.h"
 File AlarmLog;
@@ -125,8 +129,8 @@ ufo_t fo;                                       // fewer fields
 void EmptyContainer(container_t *p) { memset(p, 0, sizeof(CONTAINER)); }
 void EmptyFO(ufo_t *p) { memset(p, 0, sizeof(UFO)); }
 
-char fo_callsign[10];
-uint8_t fo_raw[34];
+uint8_t fo_raw[34] __attribute__((aligned(sizeof(uint32_t))));
+char fo_callsign[CALLSIGN_LEN];
 traffic_by_dist_t traffic_by_dist[MAX_TRACKING_OBJECTS];
 int max_alarm_level = ALARM_LEVEL_NONE;
 int8_t maxrssi;
@@ -167,7 +171,6 @@ static void icao_canadian(container_t *fop)
     buf[5] = rem+'A';
     buf[6] = '?';
     buf[7] = '\0';
-    buf[9] = '?';
 }
 
 // For USA based on:   https://github.com/guillaumemichel/icao-nnumber_converter
@@ -196,12 +199,13 @@ static void get_suffix(uint32_t offset, char *buf)
 
 void icao_to_n(container_t *fop)
 {
+    char *buf = (char *) fop->callsign;
+    if (buf[0] != '\0' && buf[0] != ' ')        // already have a callsign
+        return;
+    buf[CALLSIGN_LEN-1] = '?';           // marks as computed, not received
     if (fop->addr_type != ADDR_TYPE_ICAO)
         return;
     if (settings->band != RF_BAND_US)   // this is only for USA & Canada aircraft
-        return;
-    char *buf = (char *) fop->callsign;
-    if (buf[0] != '\0' && buf[0] != ' ')        // already have a callsign
         return;
     uint32_t icao = fop->addr;
     if (icao > 0xC00000 && icao < 0xC0CDF9) {   // a valid Canadian ICAO ID
@@ -210,7 +214,6 @@ void icao_to_n(container_t *fop)
     }
     if (icao < 0xA00001 || icao > 0xADF7C7)     // not a valid US ICAO ID
         return;
-    buf[9] = '?';    // past the trailing null char, marks as computed, not received
     icao -= 0xA00001;
     buf[0] = 'N';
     //buf[1] = '\0';
@@ -1430,16 +1433,16 @@ void CopyTraffic(container_t *cip, ufo_t *fop, const char *callsign)
     cip->rssi = RF_last_rssi;
 
     // if callsign was passed, copy it into Container[]
-    if (callsign) {
-        if ((callsign[0]      != '\0' && callsign[0]      != ' ')
-        &&  (cip->callsign[0] == '\0' || cip->callsign[0] == ' ')) {
-            strncpy((char *) cip->callsign, callsign, 8);
-            cip->callsign[8] = '\0';
-            cip->callsign[9] = '\0';
-        }
+    bool callsign_passed = (callsign && callsign[0] != '\0' && callsign[0] != ' ');
+    bool no_cip_callsign = (cip->callsign[0] == '\0' || cip->callsign[0] == ' ');
+    bool has_n_number = (cip->callsign[CALLSIGN_LEN-1] == '?');
+    if (callsign_passed && (no_cip_callsign || has_n_number)) {
+        strncpy((char *) cip->callsign, callsign, CALLSIGN_LEN-1);
+        cip->callsign[CALLSIGN_LEN-1] = '\0';
+    } else if (no_cip_callsign && (!has_n_number)) {
+        // if callsign was not received, compute USA N-number from ICAO ID (if in range)
+        icao_to_n(cip);
     }
-    // if callsign was not received, compute USA N-number from ICAO ID (if in range)
-    icao_to_n(cip);
 }
 
 void report_landed_out(ufo_t *fop)
@@ -1654,7 +1657,8 @@ void ParseData(void)
 {
     uint8_t rf_protocol = RF_last_protocol;
        // may differ from settings->rf_protocol in dual-protocol mode
-    size_t rx_size = RF_Payload_Size(rf_protocol);
+    //size_t rx_size = RF_Payload_Size(rf_protocol);
+    size_t rx_size = curr_rx_protocol_ptr->payload_size;
     rx_size = rx_size > sizeof(fo_raw) ? sizeof(fo_raw) : rx_size;
 
     if (memcmp(RxBuffer, TxBuffer, rx_size) == 0) {
@@ -1821,6 +1825,11 @@ if (fop->protocol == RF_PROTOCOL_ADSB_1090 && (settings->debug_flags & DEBUG_DEE
       }
     }
 
+#if defined(USE_EPAPER)
+    if (alarmcount)
+        screen_saver_timer = millis();
+#endif
+
     if (sound_alarm_level > ALARM_LEVEL_CLOSE) {   // implies mfop != NULL
       // use alarmcount to modify the sounds
       bool notified = Buzzer_Notify(sound_alarm_level, (alarmcount > 1));
@@ -1913,12 +1922,15 @@ int Traffic_Count()
   for (int i=0; i < MAX_TRACKING_OBJECTS; i++) {
     if (Container[i].addr) {
       count++;
-      int rssi = Container[i].rssi;
-      if (rssi < 0) {               // not an ADS-B RSSI
-          if (rssi > rssimax)
-              rssimax = rssi;
-      } else {
+      if (Container[i].protocol == RF_PROTOCOL_ADSB_1090
+      ||  Container[i].protocol == RF_PROTOCOL_GDL90) {
           ++adsb_acfts;
+      } else {
+          int rssi = Container[i].rssi;
+          if (rssi < 0) {
+              if (rssi > rssimax)
+                  rssimax = rssi;
+          }
       }
     }
   }

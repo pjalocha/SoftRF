@@ -88,10 +88,10 @@
 #include "src/driver/Filesys.h"
 #include "src/protocol/data/MAVLink.h"
 #include "src/protocol/data/GDL90.h"
-#include "src/protocol/data/GNS5892.h"
 #include "src/protocol/data/NMEA.h"
 #include "src/protocol/data/IGC.h"
 #include "src/protocol/data/D1090.h"
+#include "src/protocol/radio/ES1090.h"
 #include "src/driver/WiFi.h"
 #include "src/ui/Web.h"
 #include "src/driver/Baro.h"
@@ -157,7 +157,10 @@ void setup()
   delay(2000);
 #elif defined(USE_TINYUSB) && defined(USBCON)
   for (int i=0; i < 20; i++) {if (Serial) break; else delay(100);}
+  for (int i=0; i < 20; i++) {if (Serial1) break; else delay(100);}
+  delay(500);
 #endif
+  //Serial.println("USB Serial alive");
 
 #if LOGGER_IS_ENABLED
   Logger_setup();
@@ -247,14 +250,18 @@ void setup()
   Serial.printf("\r\nID_method: %d, chip_ID: %06X, settings_ID: %06X, used_ID: %06X\r\n\r\n",
   settings->id_method, chip_id, settings->aircraft_id, ThisAircraft.addr);
 
+  // if both battery & USB power, shut down and just charge
+#if defined(ESP32)
+  ESP32_charge_mode();
+#endif
+#if defined(ARDUINO_ARCH_NRF52)
+  nRF52_charge_mode();
+#endif
+
   SoC->Button_setup();
 
   // do this before Baro_setup - Wire.begin() happens there
   hw_info.display = SoC->Display_setup();
-
-#if defined(ESP32)
-  ESP32_charge_mode();  // if both battery & USB power, shut down and just charge
-#endif
 
 Serial.println(F("calling Baro_setup()..."));
   // do this before Filesys_setup since this tickles pins 13,2
@@ -391,8 +398,8 @@ Serial.println(SoC->getResetInfo());
 Serial.print("Memory available in PSRAM after setup: ");
 Serial.println(ESP.getFreePsram());
 #endif
-Serial.print("settings_used=");
-Serial.println(settings_used);
+//Serial.print("settings_used=");
+//Serial.println(settings_used);
 
 #if defined(ARDUINO_ARCH_NRF52)
     // check if any .IGX files need decompression
@@ -424,9 +431,9 @@ void shutparts()
 #endif
   SERIAL_FLUSH();
   SoC->swSer_enableRx(false);
+  Buzzer_fini();
 #if defined(ESP32)
   Voice_fini();
-  Buzzer_fini();
   Strobe_fini();
   Web_fini();
   NMEA_fini();
@@ -562,7 +569,7 @@ Serial.println("Tentative GNSS fix");
             gnss.date.year(), gnss.date.month(), gnss.date.day(),
             gnss.time.hour(), gnss.time.minute(), gnss.time.second());
         (void) leap_seconds_valid();    // computes leap_seconds_correction
-        if (settings->volume != BUZZER_OFF && settings->volume != BUZZER_EXT) {
+        if ( /* settings->volume != BUZZER_OFF && */ settings->volume != BUZZER_EXT) {
           SoC->Buzzer_tone(440, 333);
           SoC->Buzzer_tone(640, 333);
         }
@@ -793,10 +800,11 @@ if (rx_success) which_rx_try = 2;
   if (isTimeToExport()) {
     NMEA_Export();
     GDL90_Export();
-
+#if !defined(EXCLUDE_D1090)
     if (validfix) {
       D1090_Export();
     }
+#endif
     ExportTimeMarker = millis();
   }
 
@@ -858,7 +866,8 @@ void bridge()
 
   if(success)
   {
-    size_t rx_size = RF_Payload_Size(settings->rf_protocol);
+    //size_t rx_size = RF_Payload_Size(settings->rf_protocol);
+    size_t rx_size = curr_rx_protocol_ptr->payload_size;
     rx_size = rx_size > sizeof(fo_raw) ? sizeof(fo_raw) : rx_size;
 
     memset(fo_raw, 0, sizeof(fo_raw));
@@ -889,7 +898,8 @@ void watchout()
   success = RF_Receive();
 
   if (success) {
-    size_t rx_size = RF_Payload_Size(settings->rf_protocol);
+    //size_t rx_size = RF_Payload_Size(settings->rf_protocol);
+    size_t rx_size = curr_rx_protocol_ptr->payload_size;
     rx_size = rx_size > sizeof(fo_raw) ? sizeof(fo_raw) : rx_size;
 
     memset(fo_raw, 0, sizeof(fo_raw));
@@ -1007,7 +1017,9 @@ void txrx_test()
 #endif
     NMEA_Export();
     GDL90_Export();
+#if !defined(EXCLUDE_D1090)
     D1090_Export();
+#endif
     ExportTimeMarker = millis();
   }
 #if DEBUG_TIMING

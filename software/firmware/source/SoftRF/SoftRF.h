@@ -35,7 +35,7 @@
 #include <raspi/raspi.h>
 #endif /* RASPBERRY_PI */
 
-#define SOFTRF_FIRMWARE_VERSION "MB180"
+#define SOFTRF_FIRMWARE_VERSION "MB202"
 #define SOFTRF_IDENT            "SoftRF"
 #define SOFTRF_USB_FW_VERSION   0x0101
 
@@ -123,6 +123,8 @@
 #define ENABLE_AHRS
 #endif /* PREMIUM_PACKAGE */
 
+#define CALLSIGN_LEN 33    // to fit FANET "name" field - was 10 = size of mdb.callsign + 1
+
 typedef struct CONTAINER {
 
     uint8_t   protocol;
@@ -191,10 +193,10 @@ typedef struct CONTAINER {
     int8_t    maxrssi;
 
     /* ADS-B (ES, UAT, GDL90) specific data */
-    uint8_t   callsign[10];    /* size of mdb.callsign + 1 */
     uint32_t  positiontime;
     uint32_t  velocitytime;
     uint32_t  mode_s_time;
+    uint8_t   callsign[CALLSIGN_LEN];
 
 } container_t;
 
@@ -259,6 +261,10 @@ typedef struct hardware_info {
     byte  imu;
     byte  mag;
     byte  pmu;
+    byte  audio;
+    byte  touch;
+    byte  haptic;
+    byte  camera;
 } hardware_info_t;
 
 typedef struct IODev_ops_struct {
@@ -269,6 +275,7 @@ typedef struct IODev_ops_struct {
   int (*available)(void);
   int (*read)(void);
   size_t (*write)(const uint8_t *buffer, size_t size);
+  void (*flushTXD)();
 } IODev_ops_t;
 
 typedef struct DB_ops_struct {
@@ -279,7 +286,7 @@ typedef struct DB_ops_struct {
 
 enum
 {
-	SOFTRF_MODE_NORMAL,
+	SOFTRF_MODE_NORMAL,      // 0
 	SOFTRF_MODE_WATCHOUT,
 	SOFTRF_MODE_BRIDGE,
 	SOFTRF_MODE_RELAY,
@@ -288,17 +295,25 @@ enum
 	SOFTRF_MODE_UAV,
 	SOFTRF_MODE_RECEIVER,
 	SOFTRF_MODE_CASUAL,
-	SOFTRF_MODE_GPSBRIDGE,
+	SOFTRF_MODE_GPSBRIDGE,   // 9
 	SOFTRF_MODE_MORENMEA     // obsolete
 };
 
+#define SOFTRF_MODE_EEPROM 16     // avoid flash file system
+
 enum
 {
+// models supported by this version of SoftRF:
+	SOFTRF_MODEL_PRIME_MK2, // Lilygo T-Beam (not "Supreme")
+	SOFTRF_MODEL_BADGE,     // Lilygo T-Echo
+	SOFTRF_MODEL_CARD,      // Seeed Studios T1000-E
+	SOFTRF_MODEL_HANDHELD,  // Elecrow Thinknode M1
+	SOFTRF_MODEL_POCKET,    // Elecrow Thinknode M3
+// models not supported by this version of SoftRF:
 	SOFTRF_MODEL_UNKNOWN,
 	SOFTRF_MODEL_STANDALONE,
 	SOFTRF_MODEL_PRIME,
 	SOFTRF_MODEL_UAV,
-	SOFTRF_MODEL_PRIME_MK2,
 	SOFTRF_MODEL_RASPBERRY,
 	SOFTRF_MODEL_UAT,
 	SOFTRF_MODEL_SKYVIEW,
@@ -309,7 +324,6 @@ enum
 	SOFTRF_MODEL_UNI,
 	SOFTRF_MODEL_WEBTOP_SERIAL,
 	SOFTRF_MODEL_MINI,
-	SOFTRF_MODEL_BADGE,
 	SOFTRF_MODEL_ES,
 	SOFTRF_MODEL_BRACELET,
 	SOFTRF_MODEL_ACADEMY,
@@ -317,12 +331,28 @@ enum
 	SOFTRF_MODEL_WEBTOP_USB,
 	SOFTRF_MODEL_PRIME_MK3,
 	SOFTRF_MODEL_BALKAN,
+	SOFTRF_MODEL_HAM,
+	SOFTRF_MODEL_MIDI,
+	SOFTRF_MODEL_ECO,
+	SOFTRF_MODEL_INK,
+	SOFTRF_MODEL_COZY,
+	SOFTRF_MODEL_NEO,
+	SOFTRF_MODEL_GIZMO,
+	SOFTRF_MODEL_NANO,
+	SOFTRF_MODEL_DECENT,
+	SOFTRF_MODEL_LYRA,
+	SOFTRF_MODEL_AIRVENTURE,
+	SOFTRF_MODEL_SOLARIS,
+	SOFTRF_MODEL_LABUBU,
+	SOFTRF_MODEL_CONCORDE,
+	SOFTRF_MODEL_RUGGED,
 };
 
 enum
 {
 	SOFTRF_SHUTDOWN_NONE,
 	SOFTRF_SHUTDOWN_DEFAULT,
+	SOFTRF_SHUTDOWN_RESET,
 	SOFTRF_SHUTDOWN_DEBUG,
 	SOFTRF_SHUTDOWN_ABORT,
 	SOFTRF_SHUTDOWN_WATCHDOG,
@@ -349,11 +379,14 @@ enum
 	IMU_NONE,
 	ACC_BMA423,
 	ACC_ADXL362,
+	ACC_QMA6100P,
+	ACC_SC7A20H,
 	IMU_MPU6886,
 	IMU_MPU9250,
 	IMU_BNO080,
 	IMU_ICM20948,
 	IMU_QMI8658,
+	IMU_BHI260AP,
 };
 
 enum
@@ -362,8 +395,45 @@ enum
 	MAG_AK8963,
 	MAG_AK09916,
 	MAG_IIS2MDC,
-	MAG_QMC6310,
+	MAG_QMC6310U,
+	MAG_QMC6310N,
+	MAG_BMM150,
 };
+
+enum
+{
+	AUDIO_NONE,
+	AUDIO_PWM, /* or PDM */
+	AUDIO_MAX98357,
+	AUDIO_NS4168,
+	AUDIO_ES8311,
+};
+
+enum
+{
+	TOUCH_NONE,
+	TOUCH_FT5206,
+	TOUCH_TTP223,
+	TOUCH_FT6336,
+	TOUCH_GT911,
+	TOUCH_JD9365TG, /* HI8561 */
+	TOUCH_GT9895,
+};
+
+enum
+{
+	HAPTIC_NONE,
+	HAPTIC_DRV2605,
+	HAPTIC_AW86224,
+};
+
+enum
+{
+	CAMERA_NONE,
+	CAMERA_OV5647,
+	CAMERA_OV2710,
+};
+
 
 static inline uint32_t DevID_Mapper(uint32_t id)
 {

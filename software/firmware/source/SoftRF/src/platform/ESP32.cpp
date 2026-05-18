@@ -550,7 +550,8 @@ static void ESP32_setup()
     case MakeFlashId(BOYA_ID, BOYA_BY25Q32AL):
     default:
       hw_info.model = SOFTRF_MODEL_PRIME_MK2;
-      heap_caps_malloc_extmem_enable(1024);    // <<< try and make libraries use less RAM
+    //heap_caps_malloc_extmem_enable(1024);    // <<< try and make libraries use less RAM
+      heap_caps_malloc_extmem_enable(2048);    // <<< try and make libraries use less RAM
 #elif defined(CONFIG_IDF_TARGET_ESP32S2)
     default:
       esp32_board   = ESP32_S2_T8_V1_1;
@@ -757,6 +758,9 @@ static void ESP32_setup()
 
     lmic_pins.rst  = SOC_GPIO_PIN_TBEAM_RF_RST_V05;
     lmic_pins.busy = SOC_GPIO_PIN_TBEAM_RF_BUSY_V08;
+
+    lmic_pins.dio[0] = SOC_GPIO_PIN_DIO0;
+    lmic_pins.dio[1] = SOC_GPIO_PIN_TBEAM_RF_DIO1_V08;   // for sx1262
 
     /* use middle button on T-Beam v1.x to turn off transmissions in winch mode */
     if (hw_info.model == SOFTRF_MODEL_PRIME_MK2) {
@@ -1870,24 +1874,16 @@ static void ESP32_Sound_tone(int hz, uint8_t volume)
 
 #include <toneAC.h>
 
-static void Buzzer_tone(int hz, int duration)
-{
-    int volume = (settings->volume == BUZZER_VOLUME_LOW ? 2 : 10);
-    toneAC(hz, volume, duration, false);
-}
-
-/* dummy function to fit the SoC_ops structure */
 static void ESP32_Buzzer_tone(int hz, int duration)
 {
-    Buzzer_tone(hz, duration);
+    int volume = (settings->volume == BUZZER_VOLUME_LOW ? 8 : 10);
+    toneAC(hz, volume, duration, false);
 }
 
 void ESP32_Buzzer_test(int reason)
 {
-    if (settings->volume == BUZZER_OFF)
-        return;
-    if (settings->volume == BUZZER_EXT)
-        return;
+    /* if (settings->volume == BUZZER_OFF)  return; */
+    if (settings->volume == BUZZER_EXT)  return;
 
 Serial.println("Buzzer_test() using ToneAC...");
 
@@ -1895,26 +1891,26 @@ Serial.println("Buzzer_test() using ToneAC...");
         reason == REASON_EXT_SYS_RST ||
         reason == REASON_SOFT_RESTART) {
 Serial.println("... tone 1:");
-      Buzzer_tone(440, 500);
+      ESP32_Buzzer_tone(440, 500);
       delay(100);
 Serial.println("... tone 2:");
-      Buzzer_tone(640, 500);
+      ESP32_Buzzer_tone(640, 500);
       delay(100);
 Serial.println("... tone 3:");
-      Buzzer_tone(840, 500);
+      ESP32_Buzzer_tone(840, 500);
       delay(100);
 Serial.println("... tone 4:");
-      Buzzer_tone(1040, 600);
+      ESP32_Buzzer_tone(1040, 600);
     } else if (reason == REASON_WDT_RST) {
-      Buzzer_tone(440,  500);
-      Buzzer_tone(1040, 500);
-      Buzzer_tone(440,  500);
-      Buzzer_tone(1040, 600);
+      ESP32_Buzzer_tone(440,  500);
+      ESP32_Buzzer_tone(1040, 500);
+      ESP32_Buzzer_tone(440,  500);
+      ESP32_Buzzer_tone(1040, 600);
     } else {
-      Buzzer_tone(1040, 500);
-      Buzzer_tone(840,  500);
-      Buzzer_tone(640,  500);
-      Buzzer_tone(440,  600);
+      ESP32_Buzzer_tone(1040, 500);
+      ESP32_Buzzer_tone(840,  500);
+      ESP32_Buzzer_tone(640,  500);
+      ESP32_Buzzer_tone(440,  600);
     }
 
     noToneAC();
@@ -2078,7 +2074,7 @@ static bool ESP32_EEPROM_begin(size_t size)
 {
   bool rval = true;
 
-#if !defined(EXCLUDE_EEPROM)
+#if defined(INCLUDE_EEPROM)
   rval = EEPROM.begin(size);
 #endif
 
@@ -2587,10 +2583,6 @@ static void ESP32_Display_loop()
 static void ESP32_Display_fini(int reason)
 {
   if (hw_info.model == SOFTRF_MODEL_PRIME_MK2) {
-    if (settings->volume != BUZZER_OFF && settings->volume != BUZZER_EXT) {
-      Buzzer_tone(640, 250);
-      Buzzer_tone(440, 250);
-    }
     if (hw_info.revision >= 8) {
       // if Serial2 or external GNSS used this pin,
       // turn red LED back on to show shutdown in progress
@@ -3439,6 +3431,12 @@ static size_t ESP32S2_USB_write(const uint8_t *buffer, size_t size)
 
   return rval;
 }
+
+static void ESP32S2_USB_flushTXD()
+{
+  if (USBSerial)
+    USBSerial.flush();
+}
 #endif /* USE_USB_HOST || ARDUINO_USB_CDC_ON_BOOT */
 
 #if ARDUINO_USB_CDC_ON_BOOT || defined(USE_USB_HOST)
@@ -3449,7 +3447,8 @@ IODev_ops_t ESP32S2_USBSerial_ops = {
   ESP32S2_USB_fini,
   ESP32S2_USB_available,
   ESP32S2_USB_read,
-  ESP32S2_USB_write
+  ESP32S2_USB_write,
+  ESP32S2_USB_flushTXD
 };
 #endif /* USE_USB_HOST || ARDUINO_USB_CDC_ON_BOOT */
 #endif /* CONFIG_IDF_TARGET_ESP32S2 */
@@ -3583,7 +3582,7 @@ const SoC_ops_t ESP32_ops = {
   ESP32_WiFi_hostname,
   ESP32_WiFi_clients_count,
   ESP32_EEPROM_begin,
-  ESP32_EEPROM_extension,
+  //ESP32_EEPROM_extension,
   ESP32_SPI_begin,
   ESP32_swSer_begin,
   ESP32_swSer_enableRx,

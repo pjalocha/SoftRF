@@ -40,6 +40,7 @@ const rf_proto_desc_t fanet_proto_desc = {
   .preamble_size    = 0 /* INVALID FOR LORA */,
 #if defined(FANET_DEPRECATED)
   .syncword         = { 0x12 },  // sx127x default value, valid for FANET
+#error using FANET_DEPRECATED sync word
 #else
   .syncword         = { 0xF1 },  // FANET+
 #endif
@@ -51,7 +52,7 @@ const rf_proto_desc_t fanet_proto_desc = {
   .payload_offset   = 0,
   .crc_type         = RF_CHECKSUM_TYPE_NONE, /* LoRa packet has built-in CRC */
   .crc_size         = 0 /* INVALID FOR LORA */,
-  .bitrate          = DR_SF7B /* CR_5 BW_250 SF_7 */,
+  .bitrate          = 0,  // radio.cpp will set, was DR_SF7B /* CR_5 BW_250 SF_7 */
 
   .deviation        = 0 /* INVALID FOR LORA */,
   .whitening        = RF_WHITENING_NONE,
@@ -379,6 +380,7 @@ size_t fanet_encode(void *fanet_pkt, container_t *this_aircraft) {
   }
 
 #if defined(FANET_NEXT)
+#error using FANET_NEXT packet
   int16_t offset      = constrain(alt_diff, -254, 254);
   if(abs(offset) > 63) {
     pkt->qne_scale    = 1;
@@ -389,5 +391,5 @@ size_t fanet_encode(void *fanet_pkt, container_t *this_aircraft) {
   }
 #endif
 
-  return sizeof(fanet_packet_t);
+  return sizeof(fanet_packet_t);  // = FANET_PAYLOAD_SIZE = 16
 }

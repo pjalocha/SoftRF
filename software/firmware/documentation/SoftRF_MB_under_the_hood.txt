@@ -4,7 +4,7 @@ Preliminary Documentation for Moshe Braner's version of SoftRF
 
 By Moshe Braner
 
-This version last updated Mar 28, 2026 to fit software version MB179
+This version last updated May 15, 2026 to fit software version MB202
 Get the latest version here:
   https://github.com/moshe-braner/SoftRF/blob/master/software/firmware/documentation
 or direct link:
@@ -26,12 +26,18 @@ ignore_id - Aircraft ID to ignore: You can enter an aircraft (or device) ID that
 
 follow_id - Aircraft ID to follow: You can enter an aircraft (or device) ID to prioritize in traffic reports.  E.g., your flying buddy in another aircraft.  Leave as 000000 to not use this feature.  SoftRF tracks up to 8 aircraft, and reports up to 6, normally selecting the closest ones.  If an ID to follow is specified, it will be shown even if it is not one of the closest.  (An aircraft that is a collision danger will always take priority though.)
 
+band - Auto band returns as default (except on T-Beam), overwritten later when location is known.
+
 tx_power - Only accessible via editing the settings.txt file.  2 for full transmission power (default), 1 for low power, 0 for receive-only.  Normally use "2" (which is 100 mW or less, depending on the regional legal limit and what is safe for the radio chip, and only 8 mW for relay-only mode).  Use "1" (2 mW) for short-range testing, and "0" (no transmissions) when running SoftRF as a ground station, or when carrying a second device in the same aircraft.  If you want to limit visibility to other aircraft while retaining collision avoidance (it takes two to tango), use full power, and activate "Stealth mode".  To avoid being tracked by ground stations, activate "no_track".  Both of these are in the basic settings web page on the T-Beam.  (Note: old settings.txt files may have the (still valid) setting "txpower" (not same as "tx_power") with the obsolete coding 2=off, 0=full power.)
 
 hrange - horizontal reporting range in km
+
 vrange - vertical reporting range in hundreds of meters
+
 pointer - LED ring direction, for display such as "FLARMview". 1=track up, 2=North up
+
 relay - 0=off, 1=relay landed-out by opt-in, 2=relay "all" traffic, 3=relay-only - see section below for details
+
 pflaa_cs - 1 (default) to include "callsign" after hex ID in PFLAA sentences, 0 to exclude
 
 expire - number of seconds to keep reporting traffic not heard from - 1-30, default=5
@@ -41,7 +47,7 @@ altprotocol - default=0, meaning none.  Set to 1 (OGNTP), 6 (Legacy), 7 (Latest)
 
 flr_adsl - default=0.  If set to 1, reception will be in simultaneous Latest+ADS-L mode (in time slot 0).  And in  dual-protocol modes Latest+FANET, Latest+P3I and Latest+OGNTP will also transmit in ADS-L occasionally.
 
-nmea_out and nmea_out2 - NMEA output destination codes are: 0=off 1=serial 2=UDP 3=TCP 4=USB 5=Bluetooth 6=secondary serial.  Some destinations are not available on some devices, e.g., the T-Echo has BT but not UDP nor TCP nor secondary serial.
+nmea_out and nmea_out2 - NMEA output destination codes are: 0=off 1=serial 2=UDP 3=TCP 4=USB 5=Bluetooth 6=secondary serial.  Some destinations are not available on some devices, e.g., the T-Echo, M1, M3 and T1000-E have BT (BLE) but not UDP nor TCP nor secondary serial.
 
 Some settings are now bitfields - these are two hexadecimal digits:
 nmea_g & nmea2_g - 1 for basic (GGA+RMC), 2 for GSA (3 for basic+GSA), 4=GST 8=GSV F=all
@@ -62,17 +68,21 @@ gdl90_in - GDL90 input: this is for importing data from an external ADS-B receiv
 logflight - IGC flight log: 0=off, 1=always, 2=when airborne, 3=when airborne and also report near traffic
 loginterval - interval (seconds) between flight log position records, 1 to 155
 
-compflash - On a T-Beam with an SD card this setting is ignored.  On a T-Beam without SD card: 0=log to RAM only, 1=also compress to IGZ file in flash.  On a T-Echo: 0=log into uncompressed IGC file, 1=log into compressed IGZ file
+compflash - On a T-Beam with an SD card this setting is ignored.  On a T-Beam without SD card: 0=log to RAM only, 1=also compress to IGZ file in flash.  On a T-Echo, M1 or T1000-E: 0=record uncompressed IGC files, 1=record compressed IGZ files.  See the "Flight logging" section in the user guide for decompressing instructions.
 
 alarmlog - Alarms Log: If enabled (1), every time a traffic alarm is issued (whether audible or not), a line of text is written into the alarmlog.txt file (in flash). (If flight logging, similar data is also inserted as an LPLT comment.)  This line includes the date, time, lat/lon, alarm level (1-3), aircraft ID, relative heading, and horizontal and vertical separation (in meters).  On the T-Beam, if you want to download this data, use the web interface and click the "Alarm Log: [Download]" button at the bottom of the status page.  The existing file is normally appended to.  If space in the flash file system is low, the alarm log file is erased and a new one created.  You can also do that manually by clicking the "Alarm Log: [Clear]" button on the status page.
 
-log_nmea - option to log all NMEA output to the SD card.  (T-Beam only.)  Logging starts only when a GNSS fix is attained, using the date to name the file, similar to the IGC flight log file naming.  E.g., 52B1NMEA.txt.
+log_nmea - option to log all NMEA output to an attached SD card (T-Beam only).  Logging starts only when a GNSS fix is attained, using the date to name the file, similar to the IGC flight log file naming.  E.g., 52B1NMEA.txt.
 
 gn_to_gp - 0 by default.  Set to 1 to convert NMEA output GNSS sentences from $GN/$GA/$GL to $GP.  Reportedly this is needed for some instruments receiving these sentences that only process $GP___.  Only accessible via editing the settings.txt file.
 
 leapsecs - Leap seconds.  Only accessible via editing the settings.txt file.  The value here is used if the GNSS module says "have a fix, but leap seconds not known".  This value (default=18 which is correct for 2025) is automatically set to what the GNSS module reports after it gets the leap seconds from a satellite.  Thus there should never be a need to edit it manually.  This is currently only relevant to Ublox GNSS modules (T-Beam).
 
 geoid - Geoid Separation.  Only accessible via editing the settings.txt file.  Most users can ignore this.  Some GNSS modules do not report the "geoid separation".  For example, some older T-Beam versions (v0.7).  If this is the case, the status web page will say "Altitude above ellipsoid - MSL n.a.".  That has no effect on SoftRF operation in the "Latest" protocol which is based on the ellipsoid altitude.  But it means the MSL GNSS altitude reported to connected glide computers is slightly wrong, as is the altitude transmitted in some other protocols.  One way to fix that is to enter the "geoid separation" here manually - an integer between -104 and +84 (meters).  (If 0 is correct, enter 1.)  Alternatively, leave this setting as zero, and upload the file "egm96s.dem" using the button for that in the status page.  Then SoftRF will look up the needed number based on the location.  That file is available here: https://github.com/moshe-braner/SoftRF/blob/master/software/firmware/source/libraries/Geoid/egm96s.dem
+
+power_save - 1 to turn Wifi or Bluetooth off after 10 minutes to save power (extend battery run time).  For Wifi that is done only if no client is connected.  For Bluetooth that is done only if not connected.  To restore connectivity, reboot SoftRF.  Leave as 0 (disabled) to keep the WiFi or BT on - e.g., if you are sending data wirelessly throughout the flight to another device.
+
+power_ext - 1 to automatically shut down after a while if external power was disconnected, in a device that also has an internal battery - see "How to power the SoftRF device" section in the user guide.  This setting also prevents the device from entering "charging mode" instead of fully booting when both USB and battery power are present.  If no internal battery is installed, this setting is irrelevant.
 
 On the T-Beam only:
 
@@ -81,10 +91,6 @@ altpin0 - Serial Port input pin: the default (altpin0,0) is the "RX" pin on the 
 baudrate2 - baud rate code (0=off 2=9600 3=19200 4=38400 etc) for the secondary serial port (pins 39 ("VN") & 4)
 
 invert2 - Aux/Secondary Serial Port Logic: "Normal" to connect to TTL serial devices or a chip that converts to RS232. "Inverted" to connect to RS232 devices without a conversion chip (output voltage may not suffice - see section on connecting devices in the user guide).
-
-power_save - 1 to turn wifi off after 10 minutes if no client connected.  Leaving the WiFi on shortens the battery runtime.  Leave as 0 (disabled) to keep the WiFi on - e.g., if you are sending data throughout the flight to a connected device via WiFi.
-
-power_ext - 1 to automatically shut down after a while if external power was disconnected, in a device that also has an internal battery - see "How to power the SoftRF device" section in the user guide.  Note: this feature currently supported only on T-Beam v1.x.  This setting also prevents the T-Beam from entering "charging mode" instead of fully booting when both USB and battery power are present.  If no internal battery is installed, this setting is irrelevant.
 
 rx1090 - Internal ADS-B Receiver: here can activate use of a GNS5892 ADS-B receiver module if installed. See the section in the user guide about connecting an ADS-B receiver.
 
@@ -129,7 +135,7 @@ sd_card - SD card adapter: If such an adapter is added to a T-Beam, change this 
  2 = pins 13,VP,2,0
  3 = 5,19,27,0 (the pins used by the radio module, plus 0 for CS)
 
-On T-Echo only:
+On the T-Echo and Thinknode M1 only, with the e-paper display:
 
 epd_units - 0=metric 1=imperial 2=mixed
 epd_zoom - default zoom level
@@ -139,6 +145,7 @@ epd_adb - aircraft database type
 epd_idpref - which field(s) in the database to display in the text page: 0=reg 1=tail 2=model 3=type
 epd_vmode - default viewmode: 0=status 1=radar 2=text ...
 epd_aghost - automatic anti-ghosting screen-clearing: 0=off 1=auto 2=2min 3=5min
+    - the "off" setting turns on auto-screen-saver, the display will become blank after some minutes, click the mode button to turn the display back on
 epd_team - see Linar's T-Echo documentation
 
 
@@ -187,13 +194,13 @@ ADS-B traffic (and similarly traffic from an external GDL90 source) can be inclu
 
 Data bridging
 
-Version MB110 on the T-Beam (versions 1.0, 1.1 & 1.2) added use of a secondary serial port, and the ability to forward data from 1-3 input ports to 1-2 output ports.  This can eliminate the need for an IOIO box or Bluetooth dongle.  GNSS and FLARM messages are not forwarded.  Other messages are forwarded to the designated output routes.  Only complete NMEA sentences, $ through * plus checksum, are forwarded, but the checksum is not checked for validity.  Note that due to the way the T-Beam is designed, the same data is sent out via both the USB interface and the primary serial port (UART) pins.  They cannot be separated.  Since debugging messages may appear on the primary serial port, and it is also connected to the USB port, the secondary serial port is a bit more efficient as an interface to other instruments.
+Version MB110 on the T-Beam (versions 1.x) added use of a secondary serial port, and the ability to forward data from 1-3 input ports to 1-2 output ports.  This now also works on nRF52 devices (T-Echo, T1000E, etc) to forward USB-serial data to Bluetooth or vice versa.  This can eliminate the need for an IOIO box or Bluetooth dongle.  GNSS and FLARM messages are not forwarded.  Other messages are forwarded to the designated output routes (same destinations to which internal GNSS and FLARM messages are sent).  Only complete NMEA sentences, $ through * plus checksum, are forwarded, but the checksum is not checked for validity.  Note that due to the way the T-Beam is designed, the same data is sent out via both the USB interface and the primary serial port (UART) pins.  They cannot be separated.  Since debugging messages may appear on the primary serial port, and it is also connected to the USB port, the secondary serial port is a bit more efficient as an interface to other instruments.
 
-To achieve this functionality, the input/output structure of SoftRF had to be significantly revised.  Originally, the code in GNSS.cpp polled all input ports, and pulled GNSS data from wherever it arrived.  Since GNSS data may arrive from external devices, this may clash with data from the internal GNSS module.  Moreover, the data polling was character by character.  It looped within the same source as long as it had data waiting, but if the source paused sending before a sentence is complete then the next source would be polled.  Thus characters arriving from more than one source may get mixed together, garbling NMEA sentences.  "Serial", i.e., UART0, is the main serial port which is also (on the T-Beam) connected to the USB port.  "Serial1", i.e., UART1, is used to communicate with the GNSS module.  "Serial2", i.e., UART2, is dedicated to UAT receiver input.  In this version the UAT functionality is commented out (#define EXCLUDE_UATM in in ESP32.h) and UART2 is used for the auxillary general-purpose serial port.  And, GNSS data is taken *only* from the internal GNSS module.  NMEA sentences from external sources are polled in NMEA.cpp and handled separately.  Characters from each source are collected into separate buffers, and processed when a full NMEA sentence has accumulated.  $PSRF* sentences are still interpreted to allow configuration of SoftRF settings via that route.
+To achieve this functionality, the input/output structure of SoftRF had to be significantly revised.  Originally, the code in GNSS.cpp polled all input ports, and pulled GNSS data from wherever it arrived.  Since GNSS data may arrive from external devices, this may clash with data from the internal GNSS module.  Moreover, the data polling was character by character.  It looped within the same source as long as it had data waiting, but if the source paused sending before a sentence is complete then the next source would be polled.  Thus characters arriving from more than one source may get mixed together, garbling NMEA sentences.  "Serial", i.e., UART0, is the main serial port which is also (on the T-Beam) connected to the USB port.  "Serial1", i.e., UART1, is used to communicate with the GNSS module.  "Serial2", i.e., UART2, is the "secondary" or "auxiliary" serial port.  In this version of SoftRF GNSS data is taken *only* from the internal GNSS module.  (And the UAT functionality is commented out (#define EXCLUDE_UATM in in ESP32.h).)  NMEA sentences from external sources are polled in NMEA.cpp.  Characters from each source are collected into separate buffers, and processed when a full NMEA sentence has accumulated.  $PSRF* sentences are interpreted, instead of being forwarded, to allow configuration of SoftRF settings via that route.
 
-Which pins to use for UART2 is a problem, as there are few remaining pins still available.  It is now mapped (tentatively) to pins 39 ("VN") (rx) and 4 (tx).  (Note that pin 4 also drives the red LED on the T-Beam board.)  Tried using pin 0 for RX but there are issues with it while USB power is attached.  Another option would be 13 (better reserved for I2C devices such as a baro sensor), or one of the pins used for strobe or buzzer.  Similarly for the alternative RX pin for UART0: tentatively 36 ("VP").  The reason an alternative RX pin is needed is because when USB power is on the normal RX pin is pulled high.  And when serial data is arriving from USB it is in contention for the same RX pin as the non-USB serial input.  If usage of the alt pin is selected, serial input from USB is disabled.  Can allow both source (one at a time) by selecting the alt pin and adding a Schottky diode conducting from the "VP" pin to the "RX".  Note that on the T-Beam v0.7 it may be better to avoid using GPIO pins 36 and 39 for serial input, as there is a small capacitor between GPIO36 and GPIO37, and another between GPIO38 and GPIO39.  This may interfere with serial input, especially at high baud rates.  And serial input to GPIO 36 may interfere (through the capacitor) with the optional hardware mod connecting the GNSS PPS to GPIO37 (mimicking the later models of the T-Beam).  Can re-compile to use GPIO 13 instead of 36.
+Which pins to use for UART2 on a T-Beam is a problem, as there are few remaining pins still available.  It is now mapped to pins 39 ("VN") (rx) and 4 (tx).  (Note that pin 4 also drives the red LED on the T-Beam board.)  And for the alternative RX pin for UART0: 36 ("VP").  The reason an alternative RX pin may be needed is because when USB power is present the normal RX pin is pulled high.  And when serial data is arriving from USB it is in contention for the same RX pin as the non-USB serial input.  If usage of the alt pin is selected, serial input from USB is disabled.  (Can allow both sources (one at a time) by selecting the alt pin and adding a Schottky diode conducting from the "VP" pin to the "RX".)  Note that on the T-Beam v0.7 it may be better to avoid using GPIO pins 36 and 39 for serial input, as there is a small capacitor between GPIO36 and GPIO37, and another between GPIO38 and GPIO39.  This may interfere with serial input, especially at high baud rates.  And serial input to GPIO 36 may interfere (through the capacitor) with the optional hardware mod connecting the GNSS PPS to GPIO37 (mimicking the later models of the T-Beam).  Can re-compile to use GPIO 13 instead of 36.
 
-Added option to input GDL90 traffic messages and merge them into the traffic table.  Decoding is done in GDL90.cpp, called from NMEA_loop() in NMEA.cpp.  Separated the code adding into the table as "AddTraffic()" from the ParseData() function in TrafficHelper.cpp.  GDL90 traffic is marked as having a different "protocol".  If the same ICAO ID is already in the table under another protocol then the GDL90 report is ignored.  Duplicates may still happen if the other protocol (e.g., FLARM) of the same aircraft is not set up to use the ICAO ID.
+This version of SoftRF has option to input GDL90 traffic messages (e.g., from Stratux) and merge them into the traffic table.  Decoding is done in GDL90.cpp, called from NMEA_loop() in NMEA.cpp.  Separated the code adding into the table as "AddTraffic()" from the ParseData() function in TrafficHelper.cpp.  GDL90 traffic is marked as having a different "protocol".  If the same ICAO ID is already in the table under another protocol (e.g., FLARM or ADS-L) then the GDL90 report is ignored.  Duplicates may still happen if the other protocol of the same aircraft is not set up to use the ICAO ID.
 
 
 TIPS AND TRICKS
@@ -295,10 +302,30 @@ In a web browser, open up one of the HTML files from this folder: https://github
 
 Added code to allow accessing additional settings via $PSRFD and $PSRFF sentences - useful for hardware (T-Echo) that does not offer the web UI, automated config, etc.  New in MB148+: the first field in the NMEA sentence (the "version" number) now says whether to "save and reboot".  Thus $PSRFC,1,... will work as before (including with the BT app), while $PSRFC,0,... will just change the setting variables, not save and not reboot.  Thus can make several changes, and then do:  $PSRFC,SAV*3C   to save and reboot.  Also added replies (to source of the NMEA command) showing the correct checksum if wrong.
 
+Other special NMEA commands available:
+$PSRFC,RST*2D - reset
+$PSRFC,OFF*37 - shut down\
+$PSRFC,EEP*28 - back up the settings to EEPROM (nRF52 models only)
+$PSRFC,DFU*2F - reboot in DFU mode for UF2 firmware update (nRF52 models only)
+$PSRFC,PAG*2E - switch display page
+$PSRFC,DEM*34 - alarm-sound demo
+$PSRFC,TX0*44 - turn transmissions off
+$PSRFC,TX1*45 - turn transmissions on
+$PSRFT,0*5F - turn test mode off  
+$PSRFT,1*5E - turn test mode on
+$PSRFT,!*4E - toggle test mode
+$PSRFT,+*44 - set all debug flags
+$PSRFT,-*42 - clear all debug flags
+$PSRFT,?*50 - query test mode, debug flags, and chip ID
+
 Moved this code from GNSS.cpp to NMEA.cpp, following what was done in the mainline.
 Revised this code to be much more compact and readable.
 
-And, new starting in version MB152: $PSRFS for one-setting-at-a-time configuration.  This is far easier to use than $PSRFC/D/F.  Each setting is identified by its label, such as "id_method" or "tx_power".  Send $PSRFS,?*57 to get a list of all the settings and their current values, formatted as in the settings file.  $PSRFS,0,label,? to query one setting.  $PSRFS,0,label,value to change one setting at a time (and later $PSRFC,SAV*3C to save and reboot).  Or use $PSRFS,1,label,value to change one setting and save and reboot immediately.  Each sentence must end with a "*" followed by a valid NMEA checksum, but you can send the sentence with any two characters as the checksum, for example  $PSRFS,0,id_method,?*xx  and SoftRF will send a reply showing what the correct checksum is.  It insists on the correct checksum before doing anything with the sentence, since the NMEA config mechanism is mostly intended for automated setup by a connected device.
+And, since version MB152: $PSRFS for one-setting-at-a-time configuration.  This is far easier to use than $PSRFC/D/F.  Each setting is identified by its label, such as "id_method" or "tx_power".  Send $PSRFS,?*57 to get a list of all the settings and their current values, formatted as in the settings file.  $PSRFS,0,label,? to query one setting.  $PSRFS,0,label,value to change one setting at a time (and later $PSRFC,SAV*3C to save and reboot).  Or use $PSRFS,1,label,value to change one setting and save and reboot immediately.  Each sentence must end with a "*" followed by a valid NMEA checksum, but you can send the sentence with any two characters as the checksum, for example  $PSRFS,0,id_method,?*xx  and SoftRF will send a reply showing what the correct checksum is.  It insists on the correct checksum before doing anything with the sentence, since the NMEA config mechanism is mostly intended for automated setup by a connected device.
+
+A much more convenient way to check and adjust the settings is by using this web page:  https://ogn.helioho.st/mysoftrf/  - which works through the $PSRF* mechanism, via BLE or USB.
+
+If reading the settings.txt file fails, SoftRF will automatically read the settings from EEPROM.  If writing the settings to a file fails, SoftRF will automatically write the settings to EEPROM.  If you have a device such as a T-Echo or Thinknode M1 that has a faulty SPI flash chip, or for some reason the file system on the flash chip has problems, and the automatic use of EEPROM does not work, you can force the settings storage to be on EEPROM instead of a file.  This is done by setting the fifth bit in the "mode" setting: PSRFS,1,mode,16*5D - to cancel that and return to normal mode, use PSRFS,1,mode,0*6A
 
 
 DETAILS OF OPERATION
@@ -438,7 +465,7 @@ Support "Badge Edition" (T-Echo, nRF52840)
 
 Incorporated mainline v1.2 EPD code.  Created a new display screen that shows some of the settings.  Moved protocol & aircraft ID here from the status screen.  Replaced in the status screen with number of GNSS satellites and current collision alarm level.  Settings not changeable via the SoftRF Tool app can be changed via a USB connection and the "SoftRF settings tool 2.html" file.  The "SoftRF settings tool 1.html" offers the choice of "Latest" alarm method, which is also now the default.  Or better: change settings by editing the settings.txt file.  New file: Conf_EPD.cpp.
 
-T-Echo settings via e-paper screen
+T-Echo and Thinknode M1 settings via e-paper screen
 
 Added ability to adjust some settings within the device, using the EPD & buttons.  New file: Change_Settings_EPD.cpp  Also modified: Conf_EPD.cpp and nRF52.cpp etc.
 
@@ -494,7 +521,7 @@ In version MB146 this has been revised.  Altitudes stored within SoftRF are now 
 
 The latest protocol
 
-This version of SoftRF can now receive and transmit in the new FLARM protocol (V7) that went into effect in March 2024.  The protocol setting only chooses the transmission format.  If either "legacy" or "latest" is chosen, it receives both.  Version MB133 avoids transmission in the second half of time slot 1 (1000-1200 ms after PPS) when the "epoch" is 1 less than a multiple of 16, since reports indicate that some OGN ground stations do not decrypt the data correctly in those cases.
+This version of SoftRF can now receive and transmit in the new FLARM protocol (V7) that went into effect in March 2024.  The protocol setting only chooses the transmission format.  If either "legacy" or "latest" is chosen, it receives both.  Version avoids transmission in the second half of time slot 1 (1000-1200 ms after PPS) when the "epoch" is 1 less than a multiple of 16, since reports indicate that some OGN ground stations do not decrypt the data correctly in those cases.
 
 Other changes in version 120
 
@@ -522,7 +549,7 @@ If SoftRF fails to connect to the GNSS despite the automatic baud rate selection
 
 Reception range analysis
 
-From version MB155, SoftRF collects summary data about the distance and reception RSSI of aircraft that either just entered or just left reception range.  The data is stored in a file "range.txt" in the flash file system (SPIFFS on the T-Beam, FATFS on the T-Echo.)  This file is plain text with the following structure (14 lines total):
+From version MB155, SoftRF collects summary data about the distance and reception RSSI of aircraft that either just entered or just left reception range.  The data is stored in a file "range.txt" in the flash file system (SPIFFS on the T-Beam, FATFS on the T-Echo, M1, T1000-E.)  This file is plain text with the following structure (14 lines total):
         1               # version number
         9.4,3.226,1234  # range (km), log2(range), number of samples - for "oclock=0" (straight ahead)
         ...             # similarly for each "oclock" 1 through 11
@@ -533,6 +560,27 @@ Dual-protocol reception
 
 From version MB172, can receive FLARM and ADS-L simultaneously.  This is done following Pawel Jalocha's method in his OGN Tracker.  The sync word is just 16 bits, starting 2 bits into the "0x55 0x99" part of the sync word, which mimics the nRF905 preamble, and ending 2 bits into the rest of the sync word.  These 16 bits are the same in both protocols.  If such a packet arrives, the software then checks the next 32 bits of the sync word (2 bytes after Manchester decoding).  If these match that part of the sync word for either FLARM or ADS-L then the packet is processed: the received bits are shifted to recover the real payload, the CRC is computed and compared with the received CRC, and the packet is accepted if the CRCs match.  To enable this dual reception, ADS-L is sent and received on the same frequency as FLARM - setting a standard for future use of ADS-L in regions outside the EU.  OGNTP is always sent and received on a different frequency, thus cannot be received simultaneously as these other protocols.
 
+Protocol time-sharing
+
+From version MB177, SoftRF can time-share between protocols, e.g., FANET and "Latest".  See the "TIPS AND TRICKS" section above.  Unlike the simultaneous reception of FLARM and ADS-L, this time-sharing means that some incoming packets will be missed, since the radio modules in the devices SoftRF runs on can only listen to one frequency and one modulation type at any given time.  The timing of the protocol switching was chosen to try and minimize the reception loss.  E.g., since FLARMs (and SoftRF in the "Latest" protocol) transmit the exact same information twice each second, the second time slot within each second can be dedicated to FANET or PilotAware without loss of FLARM information (unless the packet in the first time slot was not successfully received).
+
+ID methods
+
+You can choose these ID methods in the "id_method" setting:
+* ICAO ID - also need to enter the ID in the "aircraft ID" setting
+* Device ID: it will transmit "8" followed by the last 5 hex digits of the chip ID
+* FANET ID : it will transmit "87" followed by the last 4 hex digits of the chip ID
+Note that in FANET transmissions there are a separate "vendor ID" (2 hex digits) and "aircraft ID" (4 hex digits).  If using "device ID", the "vendor ID" will be "8x", where 'x' is the fifth hex digit of the chip ID, i.e., not a fixed "vendor ID".  If using "FANET ID method" the vendor ID will be a fixed "87".
+Note also that SoftRF will use the same ID for all protocols, i.e., if you choose "FANET ID method" then FLARM and ADS-L and OGNTP transmissions will use the "87xxxx" ID.  Even if this other protocol is the only one (no alt-protocol).
+
+Transition to RadioLib
+
+Versions MB200+ use the RadioLib library instead of the Basicmac library to access the radio modules.  This allows use of the LR1110 radio module in the Thinknode M3 and T1000-E.  And this should make it easy to add support for other radio modules in the future, notably the LR2021.
+
+Transition of PilotAware to ADS-L packet format
+
+Starting in version MB201 of SoftRF the PilotAware protocol uses the ADS-L O-band low-data-rate packet format, as described in "issue 2" of ADS-L and adopted by PilotAware.  Unlike the commercial PilotAware devices, SoftRF now *only* uses the new packet format, even in the presence of devices that still transmit in the old PilotAware protocol.
+
 
 KNOWN ISSUES
 
@@ -542,7 +590,11 @@ Packets-received occasionally increments on the T-Echo while there is no traffic
 
 Reception of FLARM signals can be further improved by shifting our clock (for frequency hopping) by about 50 ms.  Not clear why.
 
+The RSSIs reported by RadioLib seem to be much lower than those reported by the Basicmac library, at least on the sx1262.  Not clear why, since they access the same sx1262 registers.  For now, a fixed value of 30 is added to the reported dBm, e.g., -90 is reported as -60.
+
+There are some issues with the Thinknode M1 still being worked on: buzzer and buttons and LEDs.
+
 
 COMPILING SOFTRF
 
-At this time I compile it under Ubuntu 20.04 using the Arduino IDE verion 1.8.16.  For the T-Beam I use the ESP32 board support version 2.0.3.  (Later versions make binaries that are too large.)  If you use any other versions, especially of the ESP32 support, expect to spend some time fixing library incompatibilities.  Compile with 160 MHz processor, 80 MHz DIO flash, Minimal SPIFFS, and PSRAM enabled.  For the T-Echo I use the Adafruit nRF52 board support version 1.2.0.
+At this time I compile it under Ubuntu 20.04 using the Arduino IDE verion 1.8.16.  For the T-Beam I use the ESP32 board support version 2.0.3.  (Later versions make binaries that are too large.)  If you use any other versions, especially of the ESP32 support, expect to spend some time fixing library incompatibilities.  Compile with 160 MHz processor, 80 MHz DIO flash, Minimal SPIFFS, and PSRAM enabled.  The current binary fills 94% of the available space, and compiling for the ESP32S3 would run out of space (due to larger libraries), which is why S3 devices are not supported.  For the nRF52 binaries (for T-Echo, M1, M3 and T1000-E) I use the Adafruit nRF52 board support version 1.2.0.

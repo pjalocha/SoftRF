@@ -33,19 +33,13 @@
 //#include "../protocol/data/JSON.h"
 #include "Battery.h"
 
-#if defined(EXCLUDE_EEPROM)
-void Settings_setup()    {}
-void EEPROM_store()    {}
-#else
-
-// read the EEPROM one more time, copy to settings.txt file, then mark EEPROM as obsolete
 settings_t settings_stored;
+settings_t *settings;
 
 uint8_t settings_used;
-int settings_file_version = 0;
+//int settings_file_version = 0;
 
-settings_t *settings;
-settingb_t *settingb;
+bool use_eeprom = false;           // set to true if mode & SOFTRF_MODE_EEPROM
 
 bool do_alarm_demo = false;        // activated by middle button on T-Beam
 bool landed_out_mode = false;      // activated by button in status web page
@@ -56,12 +50,12 @@ bool test_mode = false;            // activated by double-clicking middle button
 // first the variable test_mode is toggled, then
 // this is called, whether test_mode is on or off
 // put custom code here for debugging, for example:
-#include "../protocol/data/GNS5892.h"
+//#include "../protocol/radio/ES1090.h"
 void do_test_mode()
 {
 #if defined(ESP32)
-    if (settings->rx1090)
-        gns5892_test_mode();
+//    if (settings->rx1090)
+//        gns5892_test_mode();
 #endif
 }
 
@@ -85,15 +79,15 @@ struct setting_minmax {
     int8_t min;
     int8_t max;
 };
-#define NUM_MINMAX 6    // may need to manually enlarge this
+#define NUM_MINMAX 8    // may need to manually enlarge this
 setting_minmax stgminmax[NUM_MINMAX];
 
-inline int8_t esp_only(int8_t stg_type)
+inline int8_t wifi_only(int8_t stg_type)
 {
-#if defined(ESP32)
-    return stg_type;
-#else
+#if defined(EXCLUDE_WIFI)
     return STG_VOID;
+#else
+    return stg_type;
 #endif
 }
 
@@ -106,96 +100,120 @@ inline int8_t epd_only(int8_t stg_type)
 #endif
 }
 
+inline int8_t esp_only(int8_t stg_type)
+{
+#if defined(ESP32)
+    return stg_type;
+#else
+    return STG_VOID;
+#endif
+}
+
+#define HIDE_T (1 << SOFTRF_MODEL_PRIME_MK2) // Lilygo T-Beam - has WiFi
+#define HIDE_B (1 << SOFTRF_MODEL_BADGE)     // Lilygo T-Echo
+#define HIDE_C (1 << SOFTRF_MODEL_CARD)      // Seeed Studios T1000-E
+#define HIDE_H (1 << SOFTRF_MODEL_HANDHELD)  // Elecrow Thinknode M1
+#define HIDE_P (1 << SOFTRF_MODEL_POCKET)    // Elecrow Thinknode M3 - no file system
+#define HIDE_CP  (HIDE_C | HIDE_P)           // no display
+#define HIDE_NRF (HIDE_B | HIDE_C | HIDE_H | HIDE_P)
+
+// the first two chars of the label are the shorthand label, rest is the long label:
+
 static void init_stgdesc()
 {
-  stgdesc[STG_NONE]       = { "none",       (char*)&settings->version,    STG_VOID };
-  stgdesc[STG_VERSION]    = { "SoftRF",     (char*)&settings->version,    STG_HIDDEN };
-  stgdesc[STG_MODE]       = { "mode",       (char*)&settings->mode,       STG_UINT1 };
-  stgdesc[STG_PROTOCOL]   = { "protocol",   (char*)&settings->rf_protocol,STG_UINT1 };
-  stgdesc[STG_ALTPROTOCOL]= { "altprotocol",(char*)&settings->altprotocol,STG_UINT1 };
-  stgdesc[STG_FLR_ADSL]   = { "flr_adsl",   (char*)&settings->flr_adsl,   STG_UINT1 };
-  stgdesc[STG_BAND]       = { "band",       (char*)&settings->band,       STG_UINT1 };
-  stgdesc[STG_ACFT_TYPE]  = { "acft_type",  (char*)&settings->acft_type,  STG_UINT1 };
-  stgdesc[STG_ID_METHOD]  = { "id_method",  (char*)&settings->id_method,  STG_UINT1 };
-  stgdesc[STG_AIRCRAFT_ID]= { "aircraft_id",(char*)&settings->aircraft_id,STG_HEX6 };
-  stgdesc[STG_IGNORE_ID]  = { "ignore_id",  (char*)&settings->ignore_id,  STG_HEX6 };
-  stgdesc[STG_FOLLOW_ID]  = { "follow_id",  (char*)&settings->follow_id,  STG_HEX6 };
-  stgdesc[STG_ALARM]      = { "alarm",      (char*)&settings->alarm,      STG_UINT1 };
-  stgdesc[STG_HRANGE]     = { "hrange",     (char*)&settings->hrange,     STG_UINT1 };
-  stgdesc[STG_VRANGE]     = { "vrange",     (char*)&settings->vrange,     STG_UINT1 };
-  stgdesc[STG_OLD_TXPWR]  = { "txpower",    (char*)&settings->old_txpwr,  STG_OBSOLETE }; // old label for old coding
-  stgdesc[STG_TXPOWER]    = { "tx_power",   (char*)&settings->txpower,    STG_HIDDEN };   // new label for new coding
-  stgdesc[STG_VOLUME]     = { "volume",     (char*)&settings->volume,     STG_UINT1 };
-  stgdesc[STG_POINTER]    = { "pointer",    (char*)&settings->pointer,    STG_UINT1 };
-  stgdesc[STG_STROBE]     = { "strobe",     (char*)&settings->strobe,     esp_only(STG_UINT1) };
-  stgdesc[STG_VOICE]      = { "voice",      (char*)&settings->voice,      esp_only(STG_UINT1) };
-  stgdesc[STG_OWNSSID]    = { "myssid",     settings->myssid,      esp_only(sizeof(settings->myssid)) };
-  stgdesc[STG_EXTSSID]    = { "ssid",       settings->ssid,        esp_only(sizeof(settings->ssid)) };
-  stgdesc[STG_PSK]        = { "psk",        settings->psk,         esp_only(sizeof(settings->psk)) };
-  stgdesc[STG_HOST_IP]    = { "host_ip",    settings->host_ip,     esp_only(sizeof(settings->host_ip)) };
-  stgdesc[STG_TCPMODE]    = { "tcpmode",    (char*)&settings->tcpmode,    esp_only(STG_UINT1) };
-  stgdesc[STG_TCPPORT]    = { "tcpport",    (char*)&settings->tcpport,    esp_only(STG_UINT1) };
-  stgdesc[STG_BLUETOOTH]  = { "bluetooth",  (char*)&settings->bluetooth,  STG_UINT1 };
-  stgdesc[STG_BAUD_RATE]  = { "baud_rate",  (char*)&settings->baud_rate,  STG_UINT1 };
-  stgdesc[STG_NMEA_OUT]   = { "nmea_out",   (char*)&settings->nmea_out,   STG_UINT1 };
-  stgdesc[STG_NMEA_G]     = { "nmea_g",     (char*)&settings->nmea_g,     STG_HEX2 };
-  stgdesc[STG_NMEA_P]     = { "nmea_p",     (char*)&settings->nmea_p,     STG_HEX2 };
-  stgdesc[STG_NMEA_T]     = { "nmea_t",     (char*)&settings->nmea_t,     STG_HEX2 };
-  stgdesc[STG_NMEA_S]     = { "nmea_s",     (char*)&settings->nmea_s,     STG_HEX2 };
-  stgdesc[STG_NMEA_D]     = { "nmea_d",     (char*)&settings->nmea_d,     STG_HEX2 };
-  stgdesc[STG_NMEA_E]     = { "nmea_e",     (char*)&settings->nmea_e,     STG_HEX2 };
-  stgdesc[STG_NMEA_OUT2]  = { "nmea_out2",  (char*)&settings->nmea_out2,  STG_UINT1 };
-  stgdesc[STG_NMEA2_G]    = { "nmea2_g",    (char*)&settings->nmea2_g,    STG_HEX2 };
-  stgdesc[STG_NMEA2_P]    = { "nmea2_p",    (char*)&settings->nmea2_p,    STG_HEX2 };
-  stgdesc[STG_NMEA2_T]    = { "nmea2_t",    (char*)&settings->nmea2_t,    STG_HEX2 };
-  stgdesc[STG_NMEA2_S]    = { "nmea2_s",    (char*)&settings->nmea2_s,    STG_HEX2 };
-  stgdesc[STG_NMEA2_D]    = { "nmea2_d",    (char*)&settings->nmea2_d,    STG_HEX2 };
-  stgdesc[STG_NMEA2_E]    = { "nmea2_e",    (char*)&settings->nmea2_e,    STG_HEX2 };
-  stgdesc[STG_ALTPIN0]    = { "altpin0",    (char*)&settings->altpin0,    esp_only(STG_UINT1) };
-  stgdesc[STG_BAUDRATE2]  = { "baudrate2",  (char*)&settings->baudrate2,  esp_only(STG_UINT1) };
-  stgdesc[STG_INVERT2]    = { "invert2",    (char*)&settings->invert2,    esp_only(STG_UINT1) };
-  stgdesc[STG_ALT_UDP]    = { "alt_udp",    (char*)&settings->alt_udp,    esp_only(STG_UINT1) };
-  stgdesc[STG_RX1090]     = { "rx1090",     (char*)&settings->rx1090,     esp_only(STG_UINT1) };
-  stgdesc[STG_RX1090X]    = { "rx1090x",    (char*)&settings->rx1090x,    esp_only(STG_UINT1) };
-  stgdesc[STG_MODE_S]     = { "mode_s",     (char*)&settings->mode_s,     esp_only(STG_INT1) };
-  stgdesc[STG_HRANGE1090] = { "hrange1090", (char*)&settings->hrange1090, STG_UINT1 };
-  stgdesc[STG_VRANGE1090] = { "vrange1090", (char*)&settings->vrange1090, STG_UINT1 };
-  stgdesc[STG_GDL90_IN]   = { "gdl90_in",   (char*)&settings->gdl90_in,   esp_only(STG_UINT1) };
-  stgdesc[STG_GDL90]      = { "gdl90",      (char*)&settings->gdl90,      STG_UINT1 };
-  stgdesc[STG_D1090]      = { "d1090",      (char*)&settings->d1090,      STG_UINT1 };
-  stgdesc[STG_RELAY]      = { "relay",      (char*)&settings->relay,      STG_UINT1 };
-  stgdesc[STG_EXPIRE]     = { "expire",     (char*)&settings->expire,     STG_INT1 };
-  stgdesc[STG_PFLAA_CS]   = { "pflaa_cs",   (char*)&settings->pflaa_cs,   STG_UINT1 };
-  stgdesc[STG_STEALTH]    = { "stealth",    (char*)&settings->stealth,    STG_UINT1 };
-  stgdesc[STG_NO_TRACK]   = { "no_track",   (char*)&settings->no_track,   STG_UINT1 };
-  stgdesc[STG_POWER_SAVE] = { "power_save", (char*)&settings->power_save, STG_UINT1 };
-  stgdesc[STG_POWER_EXT]  = { "power_ext",  (char*)&settings->power_ext,  STG_UINT1 };
-  stgdesc[STG_RFC]        = { "rfc",        (char*)&settings->freq_corr,  STG_HIDDEN };
-  stgdesc[STG_ALARMLOG]   = { "alarmlog",   (char*)&settings->logalarms,  STG_UINT1 };
-  stgdesc[STG_LOG_NMEA]   = { "log_nmea",   (char*)&settings->log_nmea,   esp_only(STG_UINT1) };
-  stgdesc[STG_GNSS_PINS]  = { "gnss_pins",  (char*)&settings->gnss_pins,  esp_only(STG_UINT1) };
-  stgdesc[STG_PPSWIRE]    = { "ppswire",    (char*)&settings->ppswire,    esp_only(STG_UINT1) };
-  stgdesc[STG_SD_CARD]    = { "sd_card",    (char*)&settings->sd_card,    esp_only(STG_UINT1) };
-  stgdesc[STG_LOGFLIGHT]  = { "logflight",  (char*)&settings->logflight,  STG_UINT1 };
-  stgdesc[STG_LOGINTERVAL]= { "loginterval",(char*)&settings->loginterval,STG_UINT1 };
-  stgdesc[STG_COMPFLASH]  = { "compflash",  (char*)&settings->compflash,  STG_UINT1 };
-  stgdesc[STG_IGC_PILOT]  = { "igc_pilot",   settings->igc_pilot,         sizeof(settings->igc_pilot) };
-  stgdesc[STG_IGC_TYPE]   = { "igc_type",    settings->igc_type,          sizeof(settings->igc_type) };
-  stgdesc[STG_IGC_REG]    = { "igc_reg",     settings->igc_reg,           sizeof(settings->igc_reg) };
-  stgdesc[STG_IGC_CS]     = { "igc_cs",      settings->igc_cs,            sizeof(settings->igc_cs) };
-  stgdesc[STG_GN_TO_GP]   = { "gn_to_gp",   (char*)&settings->gn_to_gp,   STG_HIDDEN };
-  stgdesc[STG_GEOID]      = { "geoid",      (char*)&settings->geoid,      STG_HIDDEN };
-  stgdesc[STG_LEAPSECS]   = { "leapsecs",   (char*)&settings->leapsecs,   STG_HIDDEN };
-  stgdesc[STG_EPD_UNITS]  = { "units",      (char*)&settings->units,      epd_only(STG_UINT1) };
-  stgdesc[STG_EPD_ZOOM]   = { "zoom",       (char*)&settings->zoom,       epd_only(STG_UINT1) };
-  stgdesc[STG_EPD_ROTATE] = { "rotate",     (char*)&settings->rotate,     epd_only(STG_UINT1) };
-  stgdesc[STG_EPD_ORIENT] = { "orientation",(char*)&settings->orientation,epd_only(STG_UINT1) };
-  stgdesc[STG_EPD_ADB]    = { "adb",        (char*)&settings->adb,        epd_only(STG_UINT1) };
-  stgdesc[STG_EPD_IDPREF] = { "epdidpref",  (char*)&settings->epdidpref,  epd_only(STG_UINT1) };
-  stgdesc[STG_EPD_VMODE]  = { "viewmode",   (char*)&settings->viewmode,   epd_only(STG_UINT1) };
-  stgdesc[STG_EPD_AGHOST] = { "antighost",  (char*)&settings->antighost,  epd_only(STG_UINT1) };
-  stgdesc[STG_EPD_TEAM]   = { "team",       (char*)&settings->team,       epd_only(STG_HEX6) };
-  stgdesc[STG_DEBUG_FLAGS]= { "debug_flags",(char*)&settings->debug_flags,STG_HEX6 };
+  stgdesc[STG_VERSION]    = { "srSoftRF",     (char*)&settings->version,    STG_UINT1, STG_HIDDEN };
+  stgdesc[STG_MODE]       = { "mdmode",       (char*)&settings->mode,       STG_UINT1, 0 };
+  stgdesc[STG_PROTOCOL]   = { "pcprotocol",   (char*)&settings->rf_protocol,STG_UINT1, 0 };
+  stgdesc[STG_ALTPROTOCOL]= { "apaltprotocol",(char*)&settings->altprotocol,STG_UINT1, 0 };
+  stgdesc[STG_FLR_ADSL]   = { "faflr_adsl",   (char*)&settings->flr_adsl,   STG_UINT1, 0 };
+  stgdesc[STG_BAND]       = { "bdband",       (char*)&settings->band,       STG_UINT1, 0 };
+  stgdesc[STG_ACFT_TYPE]  = { "atacft_type",  (char*)&settings->acft_type,  STG_UINT1, 0 };
+  stgdesc[STG_ID_METHOD]  = { "imid_method",  (char*)&settings->id_method,  STG_UINT1, 0 };
+  stgdesc[STG_AIRCRAFT_ID]= { "aiaircraft_id",(char*)&settings->aircraft_id,STG_HEX6, 0 };
+  stgdesc[STG_IGNORE_ID]  = { "iiignore_id",  (char*)&settings->ignore_id,  STG_HEX6, 0 };
+  stgdesc[STG_FOLLOW_ID]  = { "fifollow_id",  (char*)&settings->follow_id,  STG_HEX6, 0 };
+  stgdesc[STG_ALARM]      = { "alalarm",      (char*)&settings->alarm,      STG_UINT1, 0 };
+  stgdesc[STG_HRANGE]     = { "hrhrange",     (char*)&settings->hrange,     STG_UINT1, 0 };
+  stgdesc[STG_VRANGE]     = { "vrvrange",     (char*)&settings->vrange,     STG_UINT1, 0 };
+  stgdesc[STG_OLD_TXPWR]  = { "tztxpower",    (char*)&settings->old_txpwr,  STG_OBSOLETE, 0 }; // old label for old coding
+  stgdesc[STG_TXPOWER]    = { "txtx_power",   (char*)&settings->txpower,    STG_INT1, 0 };   // new label for new coding
+  stgdesc[STG_VOLUME]     = { "bzvolume",     (char*)&settings->volume,     STG_UINT1, 0 };
+  stgdesc[STG_POINTER]    = { "popointer",    (char*)&settings->pointer,    STG_UINT1, 0 };
+  stgdesc[STG_STROBE]     = { "sbstrobe",     (char*)&settings->strobe,     esp_only(STG_UINT1), 0 };
+  stgdesc[STG_VOICE]      = { "vcvoice",      (char*)&settings->voice,      esp_only(STG_UINT1), 0 };
+  stgdesc[STG_OWNSSID]    = { "mymyssid",     settings->myssid,      wifi_only(sizeof(settings->myssid)), 0 };
+  stgdesc[STG_EXTSSID]    = { "ssssid",       settings->ssid,        wifi_only(sizeof(settings->ssid)), 0 };
+  stgdesc[STG_PSK]        = { "pwpsk",        settings->psk,         wifi_only(sizeof(settings->psk)), 0 };
+  stgdesc[STG_HOST_IP]    = { "iphost_ip",    settings->host_ip,     wifi_only(sizeof(settings->host_ip)), 0 };
+  stgdesc[STG_TCPMODE]    = { "mttcpmode",    (char*)&settings->tcpmode,    wifi_only(STG_UINT1), 0 };
+  stgdesc[STG_TCPPORT]    = { "tptcpport",    (char*)&settings->tcpport,    wifi_only(STG_UINT1), 0 };
+#if defined(ARDUINO_ARCH_NRF52)
+  stgdesc[STG_BLUETOOTH]  = { "btbluetooth",  (char*)&settings->bluetooth,  STG_UINT1, STG_SAVEHIDE };
+#else
+  stgdesc[STG_BLUETOOTH]  = { "btbluetooth",  (char*)&settings->bluetooth,  STG_UINT1, 0 };
+#endif
+  stgdesc[STG_BAUD_RATE]  = { "brbaud_rate",  (char*)&settings->baud_rate,  STG_UINT1, 0 };
+  stgdesc[STG_NMEA_OUT]   = { "n1nmea_out",   (char*)&settings->nmea_out,   STG_UINT1, 0 };
+  stgdesc[STG_NMEA_G]     = { "g1nmea_g",     (char*)&settings->nmea_g,     STG_HEX2, 0 };
+  stgdesc[STG_NMEA_P]     = { "p1nmea_p",     (char*)&settings->nmea_p,     STG_HEX2, STG_HIDDEN };
+  stgdesc[STG_NMEA_T]     = { "t1nmea_t",     (char*)&settings->nmea_t,     STG_HEX2, 0 };
+  stgdesc[STG_NMEA_S]     = { "s1nmea_s",     (char*)&settings->nmea_s,     STG_HEX2, 0 };
+  stgdesc[STG_NMEA_D]     = { "d1nmea_d",     (char*)&settings->nmea_d,     STG_HEX2, 0 };
+  stgdesc[STG_NMEA_E]     = { "e1nmea_e",     (char*)&settings->nmea_e,     STG_HEX2, 0 };
+  stgdesc[STG_NMEA_OUT2]  = { "n2nmea_out2",  (char*)&settings->nmea_out2,  STG_UINT1, 0 };
+  stgdesc[STG_NMEA2_G]    = { "g2nmea2_g",    (char*)&settings->nmea2_g,    STG_HEX2, 0 };
+  stgdesc[STG_NMEA2_P]    = { "p2nmea2_p",    (char*)&settings->nmea2_p,    STG_HEX2, STG_HIDDEN };
+  stgdesc[STG_NMEA2_T]    = { "t2nmea2_t",    (char*)&settings->nmea2_t,    STG_HEX2, 0 };
+  stgdesc[STG_NMEA2_S]    = { "s2nmea2_s",    (char*)&settings->nmea2_s,    STG_HEX2, 0 };
+  stgdesc[STG_NMEA2_D]    = { "d2nmea2_d",    (char*)&settings->nmea2_d,    STG_HEX2, 0 };
+  stgdesc[STG_NMEA2_E]    = { "e2nmea2_e",    (char*)&settings->nmea2_e,    STG_HEX2, 0 };
+  stgdesc[STG_ALTPIN0]    = { "a0altpin0",    (char*)&settings->altpin0,    esp_only(STG_UINT1), 0 };
+  stgdesc[STG_BAUDRATE2]  = { "b2baudrate2",  (char*)&settings->baudrate2,  esp_only(STG_UINT1), 0 };
+  stgdesc[STG_INVERT2]    = { "i2invert2",    (char*)&settings->invert2,    esp_only(STG_UINT1), 0 };
+  stgdesc[STG_ALT_UDP]    = { "udalt_udp",    (char*)&settings->alt_udp,    wifi_only(STG_UINT1), 0 };
+  stgdesc[STG_RX1090]     = { "r9rx1090",     (char*)&settings->rx1090,     esp_only(STG_UINT1), 0 };
+  stgdesc[STG_RX1090X]    = { "x9rx1090x",    (char*)&settings->rx1090x,    esp_only(STG_UINT1), 0 };
+  stgdesc[STG_MODE_S]     = { "msmode_s",     (char*)&settings->mode_s,     esp_only(STG_INT1), 0 };
+  stgdesc[STG_HRANGE1090] = { "h9hrange1090", (char*)&settings->hrange1090, esp_only(STG_UINT1), 0 };
+  stgdesc[STG_VRANGE1090] = { "v9vrange1090", (char*)&settings->vrange1090, esp_only(STG_UINT1), 0 };
+  stgdesc[STG_GDL90_IN]   = { "9igdl90_in",   (char*)&settings->gdl90_in,   esp_only(STG_UINT1), 0 };
+  stgdesc[STG_GDL90]      = { "90gdl90",      (char*)&settings->gdl90,      STG_UINT1, 0 };
+  stgdesc[STG_D1090]      = { "d9d1090",      (char*)&settings->d1090,      STG_UINT1, 0 };
+  stgdesc[STG_RELAY]      = { "ryrelay",      (char*)&settings->relay,      STG_UINT1, 0 };
+  stgdesc[STG_EXPIRE]     = { "exexpire",     (char*)&settings->expire,     STG_INT1, 0 };
+  stgdesc[STG_PFLAA_CS]   = { "acpflaa_cs",   (char*)&settings->pflaa_cs,   STG_UINT1, 0 };
+  stgdesc[STG_STEALTH]    = { "ststealth",    (char*)&settings->stealth,    STG_UINT1, 0 };
+  stgdesc[STG_NO_TRACK]   = { "ntno_track",   (char*)&settings->no_track,   STG_UINT1, 0 };
+  stgdesc[STG_POWER_SAVE] = { "pspower_save", (char*)&settings->power_save, STG_UINT1, 0 };
+  stgdesc[STG_POWER_EXT]  = { "pxpower_ext",  (char*)&settings->power_ext,  STG_INT1, 0 };
+  stgdesc[STG_RFC]        = { "fcrfc",        (char*)&settings->freq_corr,  STG_INT1, 0 };
+  stgdesc[STG_ALARMLOG]   = { "agalarmlog",   (char*)&settings->logalarms,  STG_UINT1, HIDE_P };  // no file system
+  stgdesc[STG_LOG_NMEA]   = { "nglog_nmea",   (char*)&settings->log_nmea,   esp_only(STG_UINT1), 0 };
+  stgdesc[STG_GNSS_PINS]  = { "gpgnss_pins",  (char*)&settings->gnss_pins,  esp_only(STG_UINT1), 0 };
+  stgdesc[STG_PPSWIRE]    = { "ppppswire",    (char*)&settings->ppswire,    esp_only(STG_UINT1), 0 };
+  stgdesc[STG_SD_CARD]    = { "sdsd_card",    (char*)&settings->sd_card,    esp_only(STG_UINT1), 0 };
+  stgdesc[STG_LOGFLIGHT]  = { "lglogflight",  (char*)&settings->logflight,  STG_UINT1, HIDE_P };  // no file system
+  stgdesc[STG_LOGINTERVAL]= { "liloginterval",(char*)&settings->loginterval,STG_UINT1, HIDE_P };
+  stgdesc[STG_COMPFLASH]  = { "cfcompflash",  (char*)&settings->compflash,  STG_UINT1, HIDE_P };
+  stgdesc[STG_IGC_PILOT]  = { "pligc_pilot",   settings->igc_pilot,         sizeof(settings->igc_pilot), HIDE_P };
+  stgdesc[STG_IGC_TYPE]   = { "mmigc_type",    settings->igc_type,          sizeof(settings->igc_type), HIDE_P };
+  stgdesc[STG_IGC_REG]    = { "rgigc_reg",     settings->igc_reg,           sizeof(settings->igc_reg), HIDE_P };
+  stgdesc[STG_IGC_CS]     = { "ciigc_cs",      settings->igc_cs,            sizeof(settings->igc_cs), HIDE_P };
+  stgdesc[STG_GN_TO_GP]   = { "gngn_to_gp",   (char*)&settings->gn_to_gp,   STG_UINT1, STG_SAVEHIDE };
+  stgdesc[STG_GEOID]      = { "gegeoid",      (char*)&settings->geoid,      STG_INT1, STG_SAVEHIDE };
+  stgdesc[STG_LEAPSECS]   = { "lsleapsecs",   (char*)&settings->leapsecs,   STG_INT1, STG_SAVEHIDE };
+  stgdesc[STG_EPD_UNITS]  = { "ununits",      (char*)&settings->units,      epd_only(STG_UINT1), HIDE_CP };
+  stgdesc[STG_EPD_ZOOM]   = { "zmzoom",       (char*)&settings->zoom,       epd_only(STG_UINT1), HIDE_CP };
+  stgdesc[STG_EPD_ROTATE] = { "rtrotate",     (char*)&settings->rotate,     epd_only(STG_UINT1), HIDE_CP };
+  stgdesc[STG_EPD_ORIENT] = { "ororientation",(char*)&settings->orientation,epd_only(STG_UINT1), HIDE_CP };
+  stgdesc[STG_EPD_ADB]    = { "dbadb",        (char*)&settings->adb,        epd_only(STG_UINT1), HIDE_CP };
+  stgdesc[STG_EPD_IDPREF] = { "ifepdidpref",  (char*)&settings->epdidpref,  epd_only(STG_UINT1), HIDE_CP };
+  stgdesc[STG_EPD_VMODE]  = { "vmviewmode",   (char*)&settings->viewmode,   epd_only(STG_UINT1), HIDE_CP };
+  stgdesc[STG_EPD_AGHOST] = { "ghantighost",  (char*)&settings->antighost,  epd_only(STG_UINT1), HIDE_CP };
+  stgdesc[STG_EPD_TEAM]   = { "tmteam",       (char*)&settings->team,       epd_only(STG_HEX6), HIDE_CP };
+  stgdesc[STG_CALLSIGN]   = { "cscallsign",   (char*)&settings->callsign,   sizeof(settings->callsign), 0 };
+  stgdesc[STG_FANET_SOS]  = { "fsfanet_sos",  (char*)&settings->fanet_sos,  STG_UINT1, 0 };
+  stgdesc[STG_DEBUG_FLAGS]= { "dgdebug_flags",(char*)&settings->debug_flags,STG_HEX8, 0 };
 
   // ensure no null labels in the array
   for (int i=0; i<STG_END; i++) {
@@ -203,7 +221,7 @@ static void init_stgdesc()
          Serial.print("stg[");
          Serial.print(i);
          Serial.println("] - empty label");
-         stgdesc[i].label = stgdesc[STG_NONE].label;
+         stgdesc[i].label = "nnnone";
          stgdesc[i].type  = STG_VOID;
      }
   }
@@ -213,7 +231,7 @@ static void init_stgdesc()
   //const char *bauds = "0=default(38) 2=9600 3=19200 4=38400 ...";
 
   stgcomment[STG_MODE]       = "0=Normal ...";
-  stgcomment[STG_PROTOCOL]   = "7=Latest 1=OGNTP 2=P3I 5=FANET";
+  stgcomment[STG_PROTOCOL]   = "7=Latest 1=OGNTP 2=PAW 5=FANET";
   stgcomment[STG_ALTPROTOCOL]= "0=none 1=OGNTP 6=Legacy 8=ADSL";
   stgcomment[STG_FLR_ADSL]   = "1=FLR+ADSL rx (& some tx)";
   stgcomment[STG_BAND]       = "1=EU 2=US ...";
@@ -255,7 +273,11 @@ static void init_stgdesc()
   stgcomment[STG_PFLAA_CS]   = yesno;
   stgcomment[STG_STEALTH]    = yesno;
   stgcomment[STG_NO_TRACK]   = yesno;
+#if defined(ARDUINO_ARCH_NRF52)
+  stgcomment[STG_POWER_SAVE] = "1=turn off BT after 10min";
+#else
   stgcomment[STG_POWER_SAVE] = "1=turn off wifi after 10min";
+#endif
   stgcomment[STG_POWER_EXT]  = "1=allow dual-power boot, shutdown long after USB off";
   stgcomment[STG_RFC]        = "freq correction +-30";
   stgcomment[STG_LEAPSECS]   = "leap seconds - automatic";
@@ -274,6 +296,8 @@ static void init_stgdesc()
   stgcomment[STG_EPD_IDPREF] = "0=reg 1=tail 2=model 3=type, 4=hex";
   stgcomment[STG_EPD_AGHOST] = "0=off 1=auto 2=2min 3=5min";
 #endif
+  //stgcomment[STG_IGC_PILOT] = "also sent as FANET name";
+  stgcomment[STG_FANET_SOS] = "0=off 1=manual 2=auto";
 
   stgminmax[0] = { STG_RFC,       -30, 30 };
   stgminmax[1] = { STG_GEOID,    -104, 84 };
@@ -281,87 +305,18 @@ static void init_stgdesc()
   stgminmax[3] = { STG_TXPOWER,     0,  2 };
   stgminmax[4] = { STG_EXPIRE,      1, ENTRY_EXPIRATION_TIME };
   stgminmax[5] = { STG_MODE_S,      0,  9 };
+  stgminmax[6] = { STG_FANET_SOS,   0,  2 };
+  stgminmax[7] = { STG_END,         0,  0 };  // marks the end
 }
 
-// copy the settings from settingb (EEPROM) to settings (file)
-static void copy_eeprom_settings()
+bool hidden_setting(uint8_t index)
 {
-    settings->mode = settingb->mode;
-    settings->rf_protocol = settingb->rf_protocol;
-    settings->band = settingb->band;
-    settings->txpower = 2 - settingb->txpower;  // coding used to be 0=full 2=off
-    settings->volume = settingb->volume;
-    settings->acft_type = settingb->acft_type;
-    settings->gn_to_gp = 0;
-    settings->geoid = 0;
-    settings->nmea_g = settingb->nmea_g;
-    settings->nmea_p = settingb->nmea_p;
-    settings->nmea_t = settingb->nmea_t;
-    settings->nmea_s = settingb->nmea_s;
-    settings->nmea_d = settingb->nmea_d;
-    settings->nmea_out = settingb->nmea_out;
-    settings->alarm = settingb->alarm;
-    settings->stealth = settingb->stealth;
-    settings->no_track = settingb->no_track;
-    settings->gdl90 = settingb->gdl90;
-    settings->d1090 = settingb->d1090;
-  //settings->json = settingb->json;
-    settings->pointer = settingb->pointer;
-    settings->freq_corr = settingb->freq_corr;
-    settings->relay = settingb->relay;
-    settings->nmea_e = settingb->nmea_e;
-    settings->nmea2_e = settingb->nmea2_e;
-    settings->baud_rate = settingb->baud_rate;
-    settings->baudrate2 = settingb->baudrate2;
-    settings->aircraft_id = settingb->aircraft_id;
-    settings->id_method = settingb->id_method;
-    settings->ignore_id = settingb->ignore_id;
-    settings->follow_id = settingb->follow_id;
-    settings->nmea2_g = settingb->nmea2_g;
-    settings->nmea2_p = settingb->nmea2_p;
-    settings->nmea2_t = settingb->nmea2_t;
-    settings->nmea2_s = settingb->nmea2_s;
-    settings->nmea2_d = settingb->nmea2_d;
-    settings->nmea_out2 = settingb->nmea_out2;
-#if defined(ESP32)
-    settings->bluetooth = settingb->bluetooth;
-    settings->power_save = settingb->power_save;
-    settings->power_ext = settingb->power_ext;
-    settings->rx1090 = settingb->rx1090;
-    settings->rx1090x = 100;
-    settings->mode_s = settingb->mode_s;
-    settings->gnss_pins = settingb->gnss_pins;
-    settings->sd_card = settingb->sd_card;
-    settings->gdl90_in = settingb->gdl90_in;
-    settings->alt_udp = settingb->alt_udp;
-    settings->invert2 = settingb->invert2;
-    settings->altpin0 = settingb->altpin0;
-    settings->voice = settingb->voice;
-    settings->strobe = settingb->strobe;
-    settings->logalarms = settingb->logalarms;
-    settings->logflight = settingb->logflight;
-    settings->loginterval = settingb->loginterval;
-    settings->tcpport = settingb->tcpport;
-    settings->tcpmode = settingb->tcpmode;
-    settings->ppswire = settingb->ppswire;
-    settings->myssid[0] = '\0';
-    strcpy(settings->ssid,settingb->ssid);
-    strcpy(settings->psk,settingb->psk);
-    strcpy(settings->host_ip,settingb->host_ip);
-    settings->debug_flags = settingb->debug_flags;
-#endif
-#if defined(USE_EPAPER)
-    // copy from ui_settings packed struct, "ui" already points to unpacked "settings"
-    settings->units = ui_settings.units;
-    settings->zoom = ui_settings.zoom;
-    settings->rotate = ui_settings.rotate;
-    settings->orientation = ui_settings.orientation;
-    settings->adb = ui_settings.adb;
-    settings->epdidpref = ui_settings.epdidpref;
-    settings->viewmode = ui_settings.viewmode;
-    settings->antighost = ui_settings.antighost;
-    settings->team = ui_settings.team;
-#endif
+    if (hw_info.model >= SOFTRF_MODEL_UNKNOWN)
+        return false;
+    bool rval = (stgdesc[index].hidden & (1 << hw_info.model));
+//if (rval)
+//Serial.printf("setting %s is hidden\r\n", stgdesc[index].label);
+    return rval;
 }
 
 // Adjust some settings after loading them
@@ -402,7 +357,7 @@ void Adjust_Settings()
     if (settings->altprotocol > RF_PROTOCOL_ADSL)
         settings->altprotocol = RF_PROTOCOL_NONE;
     if (settings->rf_protocol == RF_PROTOCOL_NONE)  // old settings files before coding change
-        settings->rf_protocol = RF_PROTOCOL_LEGACY;
+        settings->rf_protocol = RF_PROTOCOL_LATEST;
     if (settings->rf_protocol == RF_PROTOCOL_LEGACY && settings->altprotocol != RF_PROTOCOL_LATEST)
         settings->altprotocol = RF_PROTOCOL_NONE; 
     if (settings->altprotocol == RF_PROTOCOL_LEGACY && settings->rf_protocol != RF_PROTOCOL_LATEST)
@@ -411,8 +366,8 @@ void Adjust_Settings()
      * Enforce legacy protocol setting for SX1276
      * if other value (UAT) left in EEPROM from other (UATM) radio
      */
-    if (settings->rf_protocol==RF_PROTOCOL_ADSB_1090 || settings->rf_protocol==RF_PROTOCOL_ADSB_UAT)
-        settings->rf_protocol = RF_PROTOCOL_LATEST;
+    //if (settings->rf_protocol==RF_PROTOCOL_ADSB_1090 || settings->rf_protocol==RF_PROTOCOL_ADSB_UAT)
+    //    settings->rf_protocol = RF_PROTOCOL_LEGACY;
 
     if (settings->bluetooth == BLUETOOTH_SPP)
         settings->bluetooth = BLUETOOTH_LE_HM10_SERIAL;
@@ -656,6 +611,23 @@ void Adjust_Settings()
 
 #endif /* ESP32 */
 
+  if (settings->rf_protocol == RF_PROTOCOL_ADSB_1090) {
+      if (settings->altprotocol == RF_PROTOCOL_ADSB_1090
+      ||  settings->altprotocol == RF_PROTOCOL_P3I
+      ||  settings->altprotocol == RF_PROTOCOL_FANET) {
+          settings->altprotocol = RF_PROTOCOL_NONE;
+      } else {
+          settings->rf_protocol = settings->altprotocol;
+          settings->altprotocol = RF_PROTOCOL_ADSB_1090;
+      }
+  }
+  if (settings->altprotocol == RF_PROTOCOL_ADSB_1090) {
+      if (settings->rf_protocol == RF_PROTOCOL_P3I
+      ||  settings->rf_protocol == RF_PROTOCOL_FANET) {
+          settings->altprotocol = RF_PROTOCOL_NONE;
+      }
+  }
+
   if (settings->loginterval == 0)
       settings->loginterval = 1;
 
@@ -663,15 +635,35 @@ void Adjust_Settings()
   if (settings->acft_type == AIRCRAFT_TYPE_WINCH && settings->txpower == RF_TX_POWER_LOW)
       settings->txpower == RF_TX_POWER_FULL;
 
-  // min and max values for some settings (type INT1 only, or HIDDEN which is also INT1)
+  // min and max values for some settings (type INT1 only)
   for (int i=0; i<NUM_MINMAX; i++) {
      int idx = stgminmax[i].index;
-     if (stgdesc[idx].type == STG_INT1 || stgdesc[idx].type == STG_HIDDEN) {
+     if (idx == STG_END)
+         break;
+     if (stgdesc[idx].type == STG_INT1) {
        int8_t *stg = (int8_t *)stgdesc[idx].value;
        if (*stg < stgminmax[i].min)  *stg = stgminmax[i].min;
        if (*stg > stgminmax[i].max)  *stg = stgminmax[i].max;
      }
   }
+
+  if (strcmp(settings->igc_pilot,"Chuck Yeager")==0) {
+      // old settings may have had that as a default
+      *settings->igc_pilot = '\0';
+      *settings->igc_type  = '\0';
+      *settings->igc_reg   = '\0';
+      *settings->igc_cs    = '\0';
+  }
+  if (settings->igc_pilot[0]=='\0' && settings->callsign[0]!='\0')
+    strncpy(settings->igc_pilot, settings->callsign, sizeof(settings->igc_pilot));
+  if (settings->callsign[0]=='\0' && settings->igc_cs[0]!='\0')
+    strncpy(settings->callsign, settings->igc_cs, sizeof(settings->callsign));
+  if (settings->callsign[0]=='\0' && settings->igc_pilot[0]!='\0')
+    strncpy(settings->callsign, settings->igc_pilot, sizeof(settings->callsign));
+  if (settings->callsign[0]=='\0' && settings->igc_reg[0]!='\0')
+    strncpy(settings->callsign, settings->igc_reg, sizeof(settings->callsign));
+  if (settings->callsign[0]=='\0' && settings->igc_type[0]!='\0')
+    strncpy(settings->callsign, settings->igc_type, sizeof(settings->callsign));
 }
 
 const char *settings_message(const char *newmsg, const char *submsg, const int val)
@@ -688,87 +680,40 @@ const char *settings_message(const char *newmsg, const char *submsg, const int v
     return msg;
 }
 
+void show_settings_short();  // forward declaration
+
+#if defined(INCLUDE_EEPROM)
 // start reading from the first byte (address 0) of the EEPROM
 eeprom_t eeprom_block;
+#endif
 
 void Settings_setup()
 {
-  settings = &settings_stored;    // not same as settingb
+  settings = &settings_stored;
+
   init_stgdesc();
 
   // start with defaults, then overwrite from file or EEPROM
-  Settings_defaults(false);
+  Settings_defaults();
 
-  if (load_settings_from_file()) {
-      //Serial.println(F("Current settings:"));
-      //show_settings_serial();
-      return;
-  }
+  bool success = load_settings();
 
-  // settings file not found, try and read the old EEPROM block
+#if 0
+Serial.println("settings shorthand:");
+  show_settings_short();  // test shorthand formatting
+#endif
 
-  bool keepsome = false;  // whether to save some settings from the previous version
-
-  int cmd = EEPROM_EXT_LOAD;
-
-  if (SoC->EEPROM_begin(sizeof(eeprom_t))) {
-
-    for (int i=0; i<sizeof(eeprom_t); i++) {
-      eeprom_block.raw[i] = EEPROM.read(i);
-    }
-
-    settingb = &eeprom_block.field.settings;
-
-//Serial.print("sizeof(eeprom_t): ");
-//Serial.println(sizeof(eeprom_t));
-//Serial.print("sizeof(eeprom_block.field.settings): ");
-//Serial.println(sizeof(eeprom_block.field.settings));
-
-    if (eeprom_block.field.magic != SOFTRF_EEPROM_MAGIC) {
-      Serial.println(F("WARNING! EEPROM magic wrong. Loading defaults..."));
-      cmd = EEPROM_EXT_DEFAULTS;
-
-    } else {
-      Serial.print(F("EEPROM version: "));
-      Serial.println(eeprom_block.field.version, HEX);
-
-      if (eeprom_block.field.version  != SOFTRF_EEPROM_VERSION
-      ||  settingb->ssid[sizeof(settingb->ssid)-1] != '\0'
-      ||  settingb->psk[sizeof(settingb->psk)-1] != '\0'
-      ||  eeprom_block.field.version2 != SOFTRF_EEPROM_VERSION) {
-        Serial.println(F("WARNING! EEPROM version wrong. Loading defaults..."));
-
-          keepsome = (eeprom_block.field.version  == SOFTRF_EEPROM_VERSION - 1
-                   && eeprom_block.field.version2 == SOFTRF_EEPROM_VERSION - 1);
-          // keep some settings from the previous version
-          Settings_defaults(keepsome);
-          cmd = EEPROM_EXT_DEFAULTS;
-
-      } else {
-          settings_used = STG_EEPROM;
-          settings_message("Old user settings read from EEPROM");
-          Serial.println(settings_message());
-
-          SoC->EEPROM_extension(cmd);
-          // now all fields in settingb & ui are filled in, can copy into settings
-
-          copy_eeprom_settings();      // copy from packed-bits settingb to unpacked settings
-          Serial.println(F("Settings copied from EEPROM"));
-      }
-    }
-  }
-
-  //show_settings_serial();
   Adjust_Settings();
-  save_settings_to_file();  // save to a file, next boot will read from the file
+
+//  if (! success)               // load failed
+//     save_settings_to_file();  // save to a file (or EEPROM)
+// - no point saving, since it's the defaults
 }
 
-void Settings_defaults(bool keepsome)
+void Settings_defaults()
 {
-  settings_used = STG_DEFAULT;
-  settings_message("Warning: reverted to default settings");
-
-  if (keepsome == false) {    // the following may be kept from previous version
+    settings_used = STG_DEFAULT;
+    settings_message("Warning: reverted to default settings");
 
     settings->mode        = SOFTRF_MODE_NORMAL;
 
@@ -789,32 +734,25 @@ void Settings_defaults(bool keepsome)
 #elif defined(DEFAULT_REGION_EU)
     settings->band        = RF_BAND_EU;
 #else
-    if (hw_info.model == SOFTRF_MODEL_PRIME_MK2)
-        settings->band    = RF_BAND_EU;
-    else
+    //if (hw_info.model == SOFTRF_MODEL_PRIME_MK2)
+    //    settings->band    = RF_BAND_EU;
+    //else
         settings->band    = RF_BAND_AUTO;
 #endif
 
     settings->aircraft_id = 0;
     settings->txpower     = RF_TX_POWER_FULL;
 
-    settings->nmea_out    = hw_info.model == SOFTRF_MODEL_BADGE ?
-                                             DEST_BLUETOOTH :
-                                          (hw_info.model == SOFTRF_MODEL_PRIME ?
-                                             DEST_UDP :
-                                          (hw_info.model == SOFTRF_MODEL_PRIME_MK2 ?
-                                             DEST_UDP :
-                                           DEST_UART));
+#if defined(ESP32)   // T-Beam
+    settings->nmea_out  = DEST_UART;
+    settings->nmea_out2 = DEST_UDP;
+#else   // nRF52
+    settings->nmea_out  = DEST_USB;
 #if defined(USBD_USE_CDC) && !defined(DISABLE_GENERIC_SERIALUSB)
-    settings->nmea_out2   = DEST_USB;
+    settings->nmea_out2 = DEST_NONE;
 #else
-    settings->nmea_out2   = hw_info.model == SOFTRF_MODEL_BADGE ?
-                                             DEST_USB :
-                                          (hw_info.model == SOFTRF_MODEL_PRIME ?
-                                             DEST_UART :
-                                          (hw_info.model == SOFTRF_MODEL_PRIME_MK2 ?
-                                             DEST_UART :
-                                           DEST_NONE));
+    settings->nmea_out2 = DEST_BLUETOOTH;
+#endif
 #endif
 
     settings->nmea_g  = NMEA_BASIC;
@@ -847,19 +785,10 @@ void Settings_defaults(bool keepsome)
 
     if (hw_info.model == SOFTRF_MODEL_STANDALONE
      || hw_info.model == SOFTRF_MODEL_PRIME) {
-      //settings->volume  = BUZZER_OFF;
-      settings->strobe  = STROBE_OFF;
       settings->pointer = DIRECTION_NORTH_UP;
-    } else if (hw_info.model == SOFTRF_MODEL_PRIME_MK2) {
-      //settings->volume  = BUZZER_VOLUME_FULL;
-      settings->strobe  = STROBE_OFF;
-      settings->pointer = LED_OFF;
     } else {
-      //settings->volume  = BUZZER_OFF;
-      settings->strobe  = STROBE_OFF;
       settings->pointer = LED_OFF;
     }
-    settings->voice = VOICE_OFF;
 
     settings->ignore_id = 0;
     settings->follow_id = 0;
@@ -878,18 +807,15 @@ void Settings_defaults(bool keepsome)
 
     settings->logalarms  = false;
     settings->log_nmea   = false;
-  }
-  // otherwise keep those settings from the previous version
 
-  // move volume back above next time
     if (hw_info.model == SOFTRF_MODEL_STANDALONE
      || hw_info.model == SOFTRF_MODEL_PRIME) {
       settings->volume  = BUZZER_OFF;
-    } else if (hw_info.model == SOFTRF_MODEL_PRIME_MK2) {
-      settings->volume  = BUZZER_VOLUME_FULL;
     } else {
-      settings->volume  = BUZZER_OFF;
+      settings->volume  = BUZZER_VOLUME_FULL;
     }
+    settings->voice     = VOICE_OFF;
+    settings->strobe    = STROBE_OFF;
 
     settings->gnss_pins = EXT_GNSS_NONE;   // whether an external GNSS module was added to a T-Beam
     settings->ppswire   = 0;               // whether T-Beam v0.7 or external GNSS has PPS wire connected
@@ -908,118 +834,142 @@ void Settings_defaults(bool keepsome)
     settings->psk[0] = '\0';
     settings->psk[sizeof(settings->psk)-1] = '\0';
 
-  // the settings below get reset:
+    settings->relay = RELAY_LANDED;
 
-  settings->relay = RELAY_LANDED;
+  //settings->json        = JSON_OFF;
+    settings->power_save  = (hw_info.model == SOFTRF_MODEL_BRACELET ? POWER_SAVE_NORECEIVE : POWER_SAVE_NONE);
+    settings->power_ext   = 0;
+    settings->altpin0     = 0;
+    settings->debug_flags = 0;      // if and when debug output will be turned on - 0x3F for all
 
-//settings->json        = JSON_OFF;
-  settings->power_save  = (hw_info.model == SOFTRF_MODEL_BRACELET ? POWER_SAVE_NORECEIVE : POWER_SAVE_NONE);
-  settings->power_ext   = 0;
-  settings->altpin0     = 0;
-  settings->debug_flags = 0;      // if and when debug output will be turned on - 0x3F for all
-
-  settings->igc_key[0] = 0;
-  settings->igc_key[1] = 0;
-  settings->igc_key[2] = 0;
-  settings->igc_key[3] = 0;
+    settings->igc_key[0] = 0;
+    settings->igc_key[1] = 0;
+    settings->igc_key[2] = 0;
+    settings->igc_key[3] = 0;
 
 //#if defined(USE_EPAPER)
 #if defined(DEFAULT_REGION_US)
-  settings->units       = UNITS_IMPERIAL;
+    settings->units       = UNITS_IMPERIAL;
 #else
-  settings->units       = UNITS_METRIC;
+    settings->units       = UNITS_METRIC;
 #endif
-  settings->zoom        = ZOOM_MEDIUM;
-  settings->rotate      = ROTATE_0;
-  settings->orientation = DIRECTION_TRACK_UP;
-  settings->adb         = DB_NONE;
-  settings->epdidpref   = ID_HEX;
-  settings->viewmode    = VIEW_MODE_STATUS;
-  settings->antighost   = ANTI_GHOSTING_AUTO;
-  settings->team        = 0;
+    settings->zoom        = ZOOM_MEDIUM;
+    settings->rotate      = ROTATE_0;
+    settings->orientation = DIRECTION_TRACK_UP;
+    settings->adb         = DB_NONE;
+    settings->epdidpref   = ID_HEX;
+    settings->viewmode    = VIEW_MODE_STATUS;
+    settings->antighost   = ANTI_GHOSTING_AUTO;
+    settings->team        = 0;
 //#endif
+    settings->fanet_sos   = 0;
 
-  // new settings not in EEPROM
-  settings->version = 0;        // SOFTRF_SETTINGS_VERSION will come from file
-  settings->altprotocol = RF_PROTOCOL_NONE;
-  settings->flr_adsl    = 0;
-  settings->rx1090x     = 100;
-  settings->hrange      = 27;   // km
-  settings->vrange      = 20;   // 2000m
-  settings->hrange1090  = 27;   // km
-  settings->vrange1090  = 20;   // 2000m
-  settings->compflash   = false;
-  settings->expire      = EXPORT_EXPIRATION_TIME;   // 5 secs
-  settings->pflaa_cs    = true;
-  settings->leapsecs    = 18;   // <<< hardcoded!
-      // - Correct for 2025, and will automatically adjust after valid fix if necessary
-  strcpy(settings->igc_pilot, "Chuck Yeager");
-  strcpy(settings->igc_type,  "ASW20");
-  strcpy(settings->igc_reg,   "N1234");
-  strcpy(settings->igc_cs,    "XXX");
+    settings->version = 0;        // SOFTRF_SETTINGS_VERSION will come from file
+    settings->altprotocol = RF_PROTOCOL_NONE;
+    settings->flr_adsl    = 0;
+    settings->rx1090x     = 100;
+    settings->hrange      = 27;   // km
+    settings->vrange      = 20;   // 2000m
+    settings->hrange1090  = 27;   // km
+    settings->vrange1090  = 20;   // 2000m
+    settings->compflash   = false;
+    settings->expire      = EXPORT_EXPIRATION_TIME;   // 5 secs
+    settings->pflaa_cs    = true;
+    settings->leapsecs    = 18;   // <<< hardcoded!
+        // - Correct for 2025, and will automatically adjust after valid fix if necessary
+    //strcpy(settings->igc_pilot, "Chuck Yeager");
+    //strcpy(settings->igc_type,  "ASW20");
+    //strcpy(settings->igc_reg,   "N1234");
+    //strcpy(settings->igc_cs,    "XXX");
 }
 
+#if defined(INCLUDE_EEPROM)
 void EEPROM_store()
 {
   Serial.println("Writing EEPROM...");
-
-  for (int i=0; i<sizeof(eeprom_t); i++) {
-    EEPROM.write(i, eeprom_block.raw[i]);
-  }
-
-  SoC->EEPROM_extension(EEPROM_EXT_STORE);
-
+  //if (SoC->Bluetooth_ops) { SoC->Bluetooth_ops->fini(); }
+  //uint16_t size = sizeof(eeprom_struct_t);
+  //for (int i=0; i<size; i++) {
+  //  EEPROM.write(i, eeprom_block.raw[i]);
+  //}
+  //EEPROM.write_block(eeprom_block.raw, 0, size);
+  EEPROM.put(0, eeprom_block.raw);
   EEPROM_commit();
 }
+#endif
 
-#if defined(FILESYS)
-
-bool format_setting(const int i, const bool comment, char *buf, size_t size)
+bool format_setting(const int i, const bool comment, bool shorthand, char *buf, size_t size)
 {
-    if (buf == NULL) {
-        buf = NMEABuffer;
-        size = sizeof(NMEABuffer);
-    }
     int t = stgdesc[i].type;
     if (t == STG_VOID || t == STG_OBSOLETE)   // skipped in all output (web, file, serial)
         return false;
     char *v = stgdesc[i].value;
-    const char *w = stgdesc[i].label;
-    switch (t) {
-    case STG_INT1:
-    case STG_HIDDEN:
-       snprintf(buf, size, "%s,%d\r\n", w, (int)(*(int8_t*)v));
-       break;
-    case STG_UINT1:
-       snprintf(buf, size,"%s,%d\r\n", w, (int)(*(uint8_t*)v));
-       break;
-    case STG_HEX2:
-       snprintf(buf, size,"%s,%02X\r\n", w, (int)(*(uint8_t*)v));
-       break;
-    case STG_HEX6:
-       snprintf(buf, size,"%s,%06X\r\n", w, (int)(*(uint32_t*)v));
-       break;
-    default:
-       snprintf(buf, size,"%s,%s\r\n", w, (t >= STG_STR)? v : "?");
-       break;
-    }
-    if (comment && stgcomment[i] != NULL) {
-        int len = strlen(buf) - 2;   // clobber the \r\n
-        if (size > 18) {
-            while (len < 18)
-                buf[len++] = ' ';
+    if (shorthand) {
+        const char c1 = stgdesc[i].label[0];
+        const char c2 = stgdesc[i].label[1];
+        switch (t) {
+        case STG_INT1:
+           snprintf(buf, size,"%c%c%d\n", c1, c2, (int)(*(int8_t*)v));
+           break;
+        case STG_UINT1:
+           snprintf(buf, size,"%c%c%d\n", c1, c2, (int)(*(uint8_t*)v));
+           break;
+        case STG_HEX2:
+           snprintf(buf, size,"%c%c%X\n", c1, c2, (int)(*(uint8_t*)v));
+           break;
+        case STG_HEX6:
+        case STG_HEX8:
+           snprintf(buf, size,"%c%c%X\n", c1, c2, (int)(*(uint32_t*)v));
+           break;
+        default:
+           snprintf(buf, size,"%c%c%s\n", c1, c2, (t >= STG_STR)? v : "?");
+           break;
         }
-        snprintf(buf+len, size-len, "%s%s\r\n", " # ", stgcomment[i]);
+    } else {   // not shorthand
+        const char *w = &stgdesc[i].label[2];
+        switch (t) {
+        case STG_INT1:
+           snprintf(buf, size,"%s,%d\r\n", w, (int)(*(int8_t*)v));
+           break;
+        case STG_UINT1:
+           snprintf(buf, size,"%s,%d\r\n", w, (int)(*(uint8_t*)v));
+           break;
+        case STG_HEX2:
+           snprintf(buf, size,"%s,%02X\r\n", w, (int)(*(uint8_t*)v));
+           break;
+        case STG_HEX6:
+           snprintf(buf, size,"%s,%06X\r\n", w, (int)(*(uint32_t*)v));
+           break;
+        case STG_HEX8:
+           snprintf(buf, size,"%s,%X\r\n", w, (int)(*(uint32_t*)v));
+           break;
+        default:
+           snprintf(buf, size,"%s,%s\r\n", w, (t >= STG_STR)? v : "?");
+           break;
+        }
+        if (comment && stgcomment[i] != NULL) {
+            int len = strlen(buf) - 2;   // clobber the \r\n
+            if (size > 18) {
+                while (len < 18)
+                    buf[len++] = ' ';
+            }
+            snprintf(buf+len, size-len, "%s%s\r\n", " # ", stgcomment[i]);
+        }
     }
     return true;
 }
 
 void show_settings_serial()
 {
+  Serial.printf("Settings loaded from %s:\r\n",
+      settings_used==STG_FILE? "file" : settings_used==STG_EEPROM? "EEPROM" : "defaults");
+
   for (int i=STG_MODE; i<STG_END; i++) {
-     if (format_setting(i, true) == false)
+     if (hidden_setting(i))
          continue;
-     Serial.print(NMEABuffer);
+     if (format_setting(i) == false)
+         continue;
+     Serial.print(CONFBuffer);
      delay(10);
   }
 
@@ -1034,55 +984,126 @@ void show_settings_serial()
 #endif
 }
 
-void save_settings_to_file()
+#if 0
+void show_settings_short()
 {
-  if (! FS_is_mounted) {
-      Serial.println(F("File system is not mounted"));
+  for (int i=STG_MODE; i<STG_END; i++) {
+     if (format_setting(i, false, true) == false)
+         continue;
+     Serial.print(CONFBuffer);
+     Serial.print("\r");         // outputs xxxx\n\r
+     delay(5);
+  }
+}
+#endif
+
+#if defined(INCLUDE_EEPROM)
+void save_settings_to_EEPROM(bool inclusive)
+{
+  Serial.println(F("Saving settings to EEPROM..."));
+  eeprom_block.field.magic = SOFTRF_EEPROM_MAGIC;
+  char *p = eeprom_block.field.text;
+  if (use_eeprom)
+      settings->mode |= SOFTRF_MODE_EEPROM;
+  int size = 0;
+  for (int i=STG_MODE; i<STG_END; i++) {       // skip version
+     if (hidden_setting(i) && stgdesc[i].hidden != STG_SAVEHIDE)
+         continue;
+     if (inclusive == false && stgdesc[i].hidden == HIDE_P)   // no file system
+         continue;
+     if (format_setting(i, false, true, p, EEPROM_SIZE - size) == false)
+         continue;
+     int len = strlen(p);    // includes the '\n'
+     p += len;
+     size += len;
+  }
+  p[size] = '\0';
+  settings->mode &= 0x0F;
+//  while (size < EEPROM_SIZE)
+//         p[size++] = '\0';
+//Serial.println(p);
+  EEPROM_store();
+  delay(200);
+}
+#endif
+
+#if defined(FILESYS)
+
+void save_settings_to_file(bool reboot)
+{
+  SoC->WDT_fini();
+  if (SoC->Bluetooth_ops) { SoC->Bluetooth_ops->fini(); }
+#if defined(INCLUDE_EEPROM)
+  if (! FS_is_mounted || use_eeprom) {
+      if (use_eeprom)
+          Serial.println(F("File system assumed broken"));
+      else
+          Serial.println(F("File system is not mounted"));
+      save_settings_to_EEPROM(false);
+      if (! reboot && SoC->Bluetooth_ops) { SoC->Bluetooth_ops->setup(); }
+      SoC->WDT_setup();
       return;
   }
+#endif
   Serial.println(F("Saving settings to settings.txt ..."));
   if (FILESYS.exists("/settings.txt"))
       FILESYS.remove("/settings.txt");
-  File SettingsFile = FILESYS.open("/settings.txt", FILE_WRITE);
-  if (!SettingsFile) {
-      Serial.println(F("Failed to open settings.txt"));
-      return;
-  }
-  snprintf(NMEABuffer,sizeof(NMEABuffer),"# originator: model %d fw %s ID %06X\r\n",
-               hw_info.model, SOFTRF_FIRMWARE_VERSION, SoC->getChipId());
-  Serial.print(NMEABuffer);
-  SettingsFile.write((const uint8_t *)NMEABuffer, strlen(NMEABuffer));
-  settings->version = SOFTRF_SETTINGS_VERSION;
   bool write_error = false;
-  for (int i=STG_VERSION; i<STG_END; i++) {
-       if (format_setting(i, true) == false)
-           continue;
-       int len = strlen(NMEABuffer);
-       if (SettingsFile.write((const uint8_t *)NMEABuffer, len) == len) {
-           Serial.print(NMEABuffer);
-       } else {
-           Serial.println(F("Error writing to settings.txt"));
-           write_error = true;
-           break;
-       }
-       delay(10);
+  File SettingsFile = FILESYS.open("/settings.txt", FILE_WRITE);
+  if (SettingsFile) {
+      snprintf(CONFBuffer,sizeof(CONFBuffer),"# originator: model %d fw %s ID %06X\r\n",
+                   hw_info.model, SOFTRF_FIRMWARE_VERSION, SoC->getChipId());
+      Serial.print(CONFBuffer);
+      SettingsFile.write((const uint8_t *)CONFBuffer, strlen(CONFBuffer));
+      settings->version = SOFTRF_SETTINGS_VERSION;
+      for (int i=STG_VERSION; i<STG_END; i++) {
+           if (format_setting(i) == false)
+               continue;
+           int len = strlen(CONFBuffer);
+           if (SettingsFile.write((const uint8_t *)CONFBuffer, len) == len) {
+               Serial.print(CONFBuffer);
+           } else {
+               Serial.println(F("Error writing to settings.txt"));
+               write_error = true;
+               break;
+           }
+           delay(10);
+      }
+      SettingsFile.close();
+      if (write_error)
+          FILESYS.remove("/settings.txt");
+      else
+          Serial.println(F("... OK"));
+  } else {
+      write_error = true;
+      Serial.println(F("Failed to open settings.txt"));
   }
-  SettingsFile.close();
+#if defined(INCLUDE_EEPROM)
   if (write_error)
-      FILESYS.remove("/settings.txt");
-  else
-      Serial.println(F("... OK"));
+      save_settings_to_EEPROM(true);
+#endif
+  if (! reboot && SoC->Bluetooth_ops) { SoC->Bluetooth_ops->setup(); }
+  SoC->WDT_setup();
 }
 
-int find_setting(const char *p)
+#endif /* FILESYS */
+
+int find_setting(const char *p, bool sh)
 {
-    if (strcmp(p,"nmea_l")==0)   p = "nmea_t";   // to accept existing settings files
-    if (strcmp(p,"nmea2_l")==0)  p = "nmea2_t";
-    for (int i=STG_VERSION; i<STG_END; i++) {
-         if (strcmp(p,stgdesc[i].label)==0)
-            return i;
+    if (! sh) {
+        if (strcmp(p,"nmea_l")==0)   p = "nmea_t";   // to accept old settings files
+        if (strcmp(p,"nmea2_l")==0)  p = "nmea2_t";
     }
-    return STG_NONE;
+    for (int i=STG_VERSION; i<STG_END; i++) {
+        if (sh) {
+            if (p[0]==stgdesc[i].label[0] && p[1]==stgdesc[i].label[1])
+                return i;
+        } else {
+            if (strcmp(p,&stgdesc[i].label[2])==0)
+                return i;
+        }
+    }
+    return STG_END;
 }
 
 // read in obsolete settings but convert to their replacements
@@ -1106,7 +1127,6 @@ bool load_setting(const int idx, const char *q)
     char *v = stgdesc[idx].value;
     switch(t) {
     case STG_INT1:
-    case STG_HIDDEN:
     case STG_OBSOLETE:
         *(int8_t *)v = (int8_t) atoi(q);
         break;
@@ -1117,39 +1137,49 @@ bool load_setting(const int idx, const char *q)
         *(uint8_t *)v = (uint8_t) strtol(q,NULL,16);
         break;
     case STG_HEX6:
+    case STG_HEX8:
         *(uint32_t *)v = (uint32_t) strtol(q,NULL,16);
         break;
     default:
-        if (t < STG_VOID)
-            return false;
         strncpy(v, q, t);
         v[t-1] = '\0';
         break;
     }
     if (t == STG_OBSOLETE)
         convert_obsolete(idx);
+    if (idx == STG_MODE) {
+        use_eeprom = (settings->mode & SOFTRF_MODE_EEPROM);
+        settings->mode &= 0x0F;
+    }
     return true;
 }
 
-static bool interpretSetting()
+static bool interpretShorthand(char * buf=CONFBuffer)
 {
-    char *p = NMEABuffer;
-    char *q = p;
-    while (*q != ',') {
-        q++;
-        if (*q == '\0')
+    int i = find_setting(buf, true);
+    if (i == STG_END)   // not found
+        return false;
+    return load_setting(i,buf+2);  // what follows the short label, no comma
+}
+
+static bool interpretSetting(char * buf=CONFBuffer)
+{
+    char *p = buf;
+    while (*p != ',') {
+        p++;
+        if (*p == '\0')
             return false;
     }
-    *q = '\0';  // overwrites the comma
-    ++q;
+    *p = '\0';  // overwrites the comma
+    ++p;        // points to what followed the comma
 
-    int i = find_setting(p);
-    if (i == STG_NONE)
+    int i = find_setting(buf, false);
+    if (i == STG_END)   // not found
         return false;
 
     bool is_numerical = (stgdesc[i].type < STG_VOID);
 
-    char *r = q;
+    char *r = p;
     char *s = NULL;
     while (1) {
         if (*r == '\0') {     // end of the line
@@ -1176,16 +1206,18 @@ static bool interpretSetting()
         r++;
     }
 
-    return load_setting(i,q);
+    return load_setting(i,p);
 }
 
 // known obsolete settings labels, ignore them, don't complain
 bool known_obsolete_label()
 {
-    if (strcmp(NMEABuffer, "json")==0)
+    if (strcmp(CONFBuffer, "json")==0)
         return true;
     return false;
 }
+
+#if defined(FILESYS)
 
 bool load_settings_from_file()
 {
@@ -1202,31 +1234,26 @@ bool load_settings_from_file()
         Serial.println(F("Failed to open settings.txt"));
         return false;
     }
-    Settings_defaults(false);    // defaults used for any setting not mentioned in the file
+    //Settings_defaults();    // already done in settings_setup()
     //settings->version = 0;
     int limit = 200;
     Serial.println(F("Loading settings from file..."));
     int nsettings = -1;
     bool all_settings_valid = true;
-    while (getline(SettingsFile, NMEABuffer, sizeof(NMEABuffer)) && --limit>0) {
-        Serial.println(NMEABuffer);
+    while (getline(SettingsFile, CONFBuffer, sizeof(CONFBuffer)) && --limit>0) {
+        Serial.println(CONFBuffer);
         // allow blank or comment lines
-        if (NMEABuffer[0] == '#')  continue;
-        if (NMEABuffer[0] == '*')  continue;
-        if (NMEABuffer[0] == ';')  continue;
-        if (NMEABuffer[0] == '/')  continue;
-        if (NMEABuffer[0] == ' ')  continue;
-        if (NMEABuffer[0] == '\0')  continue;
+        if (CONFBuffer[0] == '#')  continue;
+        if (CONFBuffer[0] == '*')  continue;
+        if (CONFBuffer[0] == ';')  continue;
+        if (CONFBuffer[0] == '/')  continue;
+        if (CONFBuffer[0] == ' ')  continue;
+        if (CONFBuffer[0] == '\0')  continue;
         if (interpretSetting() == false) {
           if (! known_obsolete_label()) {
-            //SettingsFile.close();
-            //Serial.println(F("  - invalid setting label"));
-            //FILESYS.remove("/settings.txt");
-            //Settings_defaults(false);
-            //return false;
-            // - instead, load what is valid and ignore the invalid
+            // load what is valid and ignore the invalid
             all_settings_valid = false;
-            settings_message("Invalid setting label '%s' in file", NMEABuffer);
+            settings_message("Invalid setting label '%s' in file", CONFBuffer);
             Serial.println(settings_message());
           }
         } else {
@@ -1239,7 +1266,7 @@ bool load_settings_from_file()
         // version number was wrong or version line missing
         Serial.println(F("bad settings.txt version, erased file"));
         FILESYS.remove("/settings.txt");
-        Settings_defaults(false);
+        Settings_defaults();
         return false;
     }
     if (nsettings > 0) {                        // not counting the "version"
@@ -1252,10 +1279,74 @@ bool load_settings_from_file()
             Serial.println(settings_message());
         }
     }
-    Adjust_Settings();
     return true;
 }
 
 #endif /* FILESYS */
 
-#endif /* ! EXCLUDE_EEPROM */
+bool load_settings()
+{
+#if defined(FILESYS)
+    //if (use_eeprom) {
+    //    Serial.println(F("File system assumed broken"));
+    //} else
+    if (load_settings_from_file() == true) {
+        return true;
+    }
+#endif
+
+#if defined(INCLUDE_EEPROM)
+
+    // settings file not found, try and read settings from EEPROM block
+
+    if (SoC->EEPROM_begin(sizeof(eeprom_t)) == false) {
+        Serial.println(F("WARNING! cannot access EEPROM. Using defaults..."));
+        return false;
+    }
+
+    //for (int i=0; i<sizeof(eeprom_t); i++) {
+    //  eeprom_block.raw[i] = EEPROM.read(i);
+    //}
+    //delay(10);
+    EEPROM.get(0, eeprom_block.raw);
+
+    if (eeprom_block.field.magic != SOFTRF_EEPROM_MAGIC) {
+        Serial.println(F("WARNING! EEPROM magic wrong. Using defaults..."));
+        return false;
+    }
+
+    Serial.println(F("Loading settings from EEPROM..."));
+    settings->version = SOFTRF_SETTINGS_VERSION;
+    char *settings_text = eeprom_block.field.text;
+    int nsettings = 0;
+    bool all_settings_valid = true;
+    char *p = settings_text;
+    for (int i=0; i<EEPROM_SIZE; i++) {
+        if (settings_text[i] == '\0')
+            break;
+        if (settings_text[i] == '\n') {
+            settings_text[i] = '\0';
+//Serial.println(p);
+            if (interpretShorthand(p) == false) {
+                    all_settings_valid = false;
+                    settings_message("Invalid shorthand setting '%s'", p);
+                    Serial.println(settings_message());
+            } else {
+                ++nsettings;
+            }
+            p = &settings_text[i+1];
+        }
+    }
+
+    if (nsettings > 0) {                        // not counting the "version"
+        settings_used = STG_EEPROM;
+        if (all_settings_valid) {
+            settings_message("Loaded %d settings from EEPROM on boot", (char *)NULL, nsettings);
+            Serial.println(settings_message());
+        }
+    }
+    
+#endif
+    return true;
+}
+
