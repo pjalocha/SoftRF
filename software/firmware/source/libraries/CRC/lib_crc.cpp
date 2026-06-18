@@ -794,6 +794,8 @@ static void init_adsl_tab()
         crc_tabadsl[i] = CRC;
         yield();
     }
+
+    crc_tabadsl_init = 1;
 }
 
 uint32_t check_adsl_crc(const uint8_t *Byte, uint8_t Bytes)
