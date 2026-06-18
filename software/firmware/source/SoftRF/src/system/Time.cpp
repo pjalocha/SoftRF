@@ -262,8 +262,8 @@ void Time_loop()
     } else {
 
 // also compute as if PPS not available, for a test
-uint32_t no_pps_corr;
-uint32_t no_pps_time;
+//uint32_t no_pps_corr;
+//uint32_t no_pps_time;
 
     if (newfix) {
 
@@ -288,12 +288,12 @@ uint32_t no_pps_time;
               Serial.println(gnss_age);
           }
 */
-no_pps_corr = assumed_ms;
-no_pps_time = latest_Commit_Time - no_pps_corr;
+//no_pps_corr = assumed_ms;
+//no_pps_time = latest_Commit_Time - no_pps_corr;
 
         } else {   /* PPS not available */
           time_corr_neg = assumed_ms;
-          newtime = latest_Commit_Time - time_corr_neg;
+          newtime = latest_Commit_Time - time_corr_neg + ADJ_FOR_FLARM_RECEPTION;
         }
     
         if ( /* newfix && */ gnss_age < 2500 && newtime > base_time_ms
