@@ -24,6 +24,8 @@
 #ifndef PROTOCOL_FANET_H
 #define PROTOCOL_FANET_H
 
+#include <protocol.h>
+
 /*
  * FANET uses LoRa modulation
  * FANET+ uses both LoRa (FANET) and FSK(FLARM)
@@ -109,8 +111,22 @@ typedef struct {
 #endif
 } __attribute__((packed)) fanet_packet_t;
 
-#define FANET_PAYLOAD_SIZE    sizeof(fanet_packet_t)  // 16
+/*
+ * Ground Tracking frame type (#7),
+ * Standard header,
+ * No signature,
+ * Broadcast
+ */
+
+/* Type 7 body is 7 bytes: 3 lat + 3 lon + 1 status byte.
+ * Encoded manually (not as bitfield struct) to avoid compiler layout issues.
+ * Status byte: [0] track_online, [3:1] reserved, [7:4] ground_type
+ */
+#define FANET_GROUND_BODY_SIZE  7
+
+#define FANET_PAYLOAD_SIZE    sizeof(fanet_packet_t)  // 16 - name packets may be larger
 #define FANET_HEADER_SIZE     4
+#define FANET_NAME_INTERVAL_MS  120000  /* 2 minutes */
 
 #define FANET_AIR_TIME        36   /* in ms */
 
@@ -118,6 +134,16 @@ typedef struct {
 #define FANET_TX_INTERVAL_MAX 3500
 
 extern const rf_proto_desc_t fanet_proto_desc;
+extern const uint8_t aircraft_type_to_fanet[];
+extern const uint8_t aircraft_type_from_fanet[];
+
+#define AT_TO_FANET(x)  ((x) > 16 ? \
+   FANET_AIRCRAFT_TYPE_OTHER : pgm_read_byte(&aircraft_type_to_fanet[(x)]))
+
+#define AT_FROM_FANET(x)  ((x) > 7 ? \
+   AIRCRAFT_TYPE_UNKNOWN : pgm_read_byte(&aircraft_type_from_fanet[(x)]))
+
+extern uint8_t fanet_sos_count;
 
 bool fanet_decode(void *, container_t *, ufo_t *);
 size_t fanet_encode(void *, container_t *);
