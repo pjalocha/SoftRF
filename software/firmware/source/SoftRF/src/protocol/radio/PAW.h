@@ -32,7 +32,7 @@
 
 //#define P3I_FDEV            RF_FREQUENCY_DEVIATION_19_2KHZ
 #define P3I_FDEV            RF_FREQUENCY_DEVIATION_12_5KHZ
-#define P3I_BANDWIDTH       RF_RX_BANDWIDTH_SS_50KHZ
+#define P3I_BANDWIDTH       RF_RX_BANDWIDTH_SS_50KHZ    // maybe should be RF_RX_BANDWIDTH_SS_62KHZ
 
 #define P3I_AIR_TIME        10 /* in ms */
 
@@ -80,5 +80,23 @@ extern const rf_proto_desc_t paw_proto_desc;
 
 bool paw_decode(void *, container_t *, ufo_t *);
 size_t paw_encode(void *, container_t *);
+
+#if 1
+// for now also decode (but not encode) old-protocol packets:
+typedef struct {
+    uint8_t  sync;      // $
+    uint32_t  icao:24;   // 24bit identifier 
+    float    longitude; // IEEE-754 
+    float    latitude;  // IEEE-754 
+    uint16_t altitude;  // Geo altitude (GNSS) in metres
+    uint16_t track;     // degrees Relative to true north
+    uint8_t  msd[4];    // sequencer
+    uint16_t knots;     //  ground speed of the aircraft in knots
+    uint8_t  aircraft;  //  aircraft type
+    uint8_t  crc;
+    /* No vertical speed available */
+} __attribute__((packed)) p3i_packet_t;
+bool p3i_decode(void *, container_t *, ufo_t *);
+#endif
 
 #endif /* PROTOCOL_PAW_H */

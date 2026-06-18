@@ -59,6 +59,75 @@ const rf_proto_desc_t paw_proto_desc = {
   .slot1            = {0, 0}
 };
 
+
+#if 1
+// for now also decode (but not encode) old-protocol packets:
+
+// why this is 56 bytes when only 24 are used?
+/*
+const uint8_t whitening_pattern[] PROGMEM = { 0x05, 0xb4, 0x05, 0xae, 0x14, 0xda,
+  0xbf, 0x83, 0xc4, 0x04, 0xb2, 0x04, 0xd6, 0x4d, 0x87, 0xe2, 0x01, 0xa3, 0x26,
+  0xac, 0xbb, 0x63, 0xf1, 0x01, 0xca, 0x07, 0xbd, 0xaf, 0x60, 0xc8, 0x12, 0xed,
+  0x04, 0xbc, 0xf6, 0x12, 0x2c, 0x01, 0xd9, 0x04, 0xb1, 0xd5, 0x03, 0xab, 0x06,
+  0xcf, 0x08, 0xe6, 0xf2, 0x07, 0xd0, 0x12, 0xc2, 0x09, 0x34, 0x20 };
+*/
+const uint8_t whitening_pattern[sizeof(p3i_packet_t)] PROGMEM = {
+  0x05, 0xb4, 0x05, 0xae, 0x14, 0xda, 0xbf, 0x83,
+  0xc4, 0x04, 0xb2, 0x04, 0xd6, 0x4d, 0x87, 0xe2,
+  0x01, 0xa3, 0x26, 0xac, 0xbb, 0x63, 0xf1, 0x01
+};
+
+bool p3i_decode(void *p3i_pkt, container_t *this_aircraft, ufo_t *fop)
+{
+  p3i_packet_t *pkt = (p3i_packet_t *) p3i_pkt;
+
+  uint8_t cs = 0;
+  uint8_t *p = (uint8_t *)pkt;
+  for (int i=0; i<sizeof(p3i_packet_t); i++) {
+    *p ^= pgm_read_byte(&whitening_pattern[i]);
+    cs ^= *p++;
+  }
+  if (cs) {
+    Serial.println("P3I internal CS8 wrong");
+    return(false);
+  }
+
+  if (pkt->sync != '$') {
+    Serial.println("P3I sync byte not $");
+    return(false);         // reject the occasional other type of packet
+  }
+
+  ++rx_packets_counter;
+
+  fop->protocol = RF_PROTOCOL_P3I;
+
+  fop->addr = pkt->icao;
+
+  if (fop->addr == settings->ignore_id)
+         return false;                 /* ID told in settings to ignore */
+  if (fop->addr == ThisAircraft.addr)
+         return false;                 /* same ID as this aircraft - ignore */
+
+  fop->addr_type = (fop->addr >= 0xFF0000? ADDR_TYPE_FLARM : ADDR_TYPE_ICAO);
+
+  fop->timestamp = (uint32_t) this_aircraft->timestamp;
+  fop->gnsstime_ms = millis();
+
+  fop->latitude = pkt->latitude;
+  fop->longitude = pkt->longitude;
+  fop->altitude = (float) pkt->altitude;
+  fop->aircraft_type = (pkt->aircraft & 0x0F);   // higher bits signal packet is relayed
+  fop->course = (float) pkt->track;
+  fop->speed = (float) pkt->knots;
+
+  fop->vs = 0;
+  fop->stealth = 0;
+  fop->no_track = 0;
+
+  return true;
+}
+#endif
+
 bool paw_decode(void *pkt, container_t *this_aircraft, ufo_t *fop)
 {
     // need to check the ADS-L CRC embedded in the PAW packet
@@ -67,13 +136,23 @@ bool paw_decode(void *pkt, container_t *this_aircraft, ufo_t *fop)
     // use table-driven version instead:
     if (check_adsl_crc((const uint8_t *) pkt, (uint8_t) P3I_PAYLOAD_SIZE)) {
         Serial.println("PAW internal CRC24 wrong");
+#if 1
+        Serial.println("Trying old P3I protocol...");
+        return p3i_decode(pkt, this_aircraft, fop);
+#else
         return false;
+#endif
     }
 
     ++rx_packets_counter;
 
     if (adsl_decode(pkt, this_aircraft, fop) == false)
         return false;
+
+    if (fop->addr_type != ADDR_TYPE_FLARM && fop->addr_type != ADDR_TYPE_ICAO) {
+        // commercial PAW devices send addr_type 4, translated by ads-l.h to 0
+        fop->addr_type = (fop->addr >= 0xFF0000? ADDR_TYPE_FLARM : ADDR_TYPE_ICAO);
+    }
 
     fop->protocol = RF_PROTOCOL_PAW;
     return true;
@@ -82,8 +161,10 @@ bool paw_decode(void *pkt, container_t *this_aircraft, ufo_t *fop)
 size_t paw_encode(void *pkt, container_t *aircraft) {
 
   // if not airborne, transmit only once in 8 seconds
-  if (ThisAircraft.airborne == 0 && ThisAircraft.timestamp < ThisAircraft.positiontime + 8 && (! test_mode))
-      return 0;   // otherwise adsl_encode() will return 0
+  if (ThisAircraft.airborne == 0 && ThisAircraft.timestamp < ThisAircraft.positiontime + 8 && (! test_mode)) {
+      RF_Transmit_Postpone();
+      return 0;              // otherwise adsl_encode() will return 0
+  }
 
   size_t size = adsl_encode(pkt, aircraft);
   if (size != ADSL_PAYLOAD_SIZE + ADSL_CRC_SIZE  // 24
