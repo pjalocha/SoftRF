@@ -35,6 +35,7 @@
 #include "../../driver/Settings.h"
 #include "../../system/Time.h"
 #include "Legacy.h"
+//#include "FANET.h"
 
 const rf_proto_desc_t adsl_proto_desc = {
   .name            = {'A','D','S','-','L', 0},
@@ -109,7 +110,8 @@ bool adsl_decode(void *pkt, container_t *this_aircraft, ufo_t *fop) {
       return false;                  /* ID told in settings to ignore */
 
   if (fop->addr == ThisAircraft.addr) {
-      if (landed_out_mode) {
+      if (ground_status == GROUND_STATUS_NEED_RIDE
+      ||  ground_status >= GROUND_STATUS_NEED_TECH) {   // landed-out mode
           // if "seeing itself" is via requested relay, show it
           // Serial.println("Received own ID - relayed as landed out");
       } else {
@@ -194,15 +196,17 @@ size_t adsl_encode(void *pkt, container_t *aircraft) {
       adsl_t.setRelay(1);
   } else {
       // if not airborne, transmit only once in 8 seconds
-      if (ThisAircraft.airborne == 0 && ThisAircraft.timestamp < ThisAircraft.positiontime + 8 && (! test_mode))
+      if (ThisAircraft.airborne == 0 && ThisAircraft.timestamp < ThisAircraft.positiontime + 8 && (! test_mode)) {
+          RF_Transmit_Postpone();
           return 0;
+      }
       ThisAircraft.positiontime = ThisAircraft.timestamp;
       uint8_t addr_type = settings->id_method;
       if (addr_type == ADDR_TYPE_FANET || addr_type == ADDR_TYPE_OVERRIDE)
           addr_type = ADDR_TYPE_FLARM;
       adsl_t.setAddrTypeOGN(addr_type);
       adsl_t.setRelay(0);
-      if (landed_out_mode)
+      if (ground_status == GROUND_STATUS_NEED_RIDE)
           aircraft_type = AIRCRAFT_TYPE_UNKNOWN;        // mark this aircraft as landed-out
   }
 
