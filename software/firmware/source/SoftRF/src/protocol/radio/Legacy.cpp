@@ -31,6 +31,7 @@
 #include "../../driver/RF.h"
 #include "../../driver/Settings.h"
 #include "../../driver/Filesys.h"
+//#include "FANET.h"
 #include "../data/IGC.h"
 #include "../data/NMEA.h"
 
@@ -180,8 +181,44 @@ void btea(uint32_t *v, int8_t n, const uint32_t key[4]) {
     }
 }
 
+// encrypt and decrypt "text messages" (PFLAM)
+static const uint32_t textkeys[4] = { 0x6216B122, 0xEDAC4738, 0x1780FCD7, 0x39173CF5 };
+void encrypt_text_msg(uint32_t *wp)
+{
+    uint8_t *data = (uint8_t *) wp;
+    uint8_t c = data[16];
+    for (int i=0; i<16; i++) {
+        uint8_t d = data[i];
+        if (d == 0)
+            break;
+        c ^= d;
+    }
+    data[16] = c;
+    btea(wp, 4, textkeys);
+}
+void decrypt_text_msg(uint32_t *wp)
+{
+    btea(wp, -4, textkeys);
+    uint8_t *data = (uint8_t *) wp;
+    if (data[15] == 0) {
+        data[16] = 0;
+        return;
+    }
+    uint8_t c = data[16];
+    for (int i=0; i<16; i++) {
+        //if (data[i] == 0)
+        //    break;
+        c ^= data[i];
+    }
+    data[16] = c;
+    data[17] = '\0';   // ensure termination
+}
 
-// first stage of decrypting
+// store text message from other aircraft, to be relayed
+static bool have_message_to_relay = false;
+static latest_packet_t message_to_relay;
+
+// first stage of decrypting position messages
 void btea2(uint32_t *data, bool encode)
 {
     // for new protocol, this btea() stage uses fixed keys
@@ -189,7 +226,7 @@ void btea2(uint32_t *data, bool encode)
     btea(data+2, (encode? 4 : -4), keys);
 }
 
-// second stage of decrypting
+// second stage of decrypting position messages
 void scramble(uint32_t *data, uint32_t timestamp)
 {
 
@@ -506,6 +543,101 @@ bool latest_decode(void* buffer, container_t* this_aircraft, ufo_t* fop)
     return true;
 }
 
+// Decode some of the FLARM text message types
+// - XCsoar parses the periodic messages plus VHF (limited to one frequency)
+
+void pflam_decode(void *buffer, container_t *cip, ufo_t *fop) {     // fop has addr, addr_type
+
+    if ((settings->nmea_t & NMEA_T_PFLAM == 0) && (settings->nmea2_t & NMEA_T_PFLAM == 0))
+        return;
+    // - also done in NMEA_PFLAM()
+
+    /* find this aircraft in the tracking table
+         - already done in legacy_decode(), cip passed
+    container_t *cip = NULL;
+    for (int i=0; i < MAX_TRACKING_OBJECTS; i++) {
+        if (Container[i].addr == fop->addr) {
+            cip = &Container[i];
+            break;
+        }
+    }
+    if (cip == NULL)   // not found
+        return;
+    */
+
+//Serial.println("pflam_decode()...");
+
+    // btea() seems to choke on odd addresses, so copy
+    uint8_t *bp = (uint8_t *) buffer;
+    uint32_t wp[5];
+    char *cp = (char *) wp;
+    memcpy( cp, &bp[7], 17 );
+
+    uint8_t pflam_type = bp[6];
+#if 1
+    if (pflam_type == PFLAM_UCST || (pflam_type >= PFLAM_VER && pflam_type <= PFLAM_METAR)) {
+        if (settings->debug_flags & 0x10000000) {
+          /* output the raw non-traffic packet as a whole, as hex */
+          snprintf_P(NMEABuffer, sizeof(NMEABuffer),
+            PSTR("$PSRFM,%ld,%06X,%d,%s\r\n"),
+            RF_time, fop->addr, pflam_type,
+            bytes2Hex((byte *)buffer, sizeof (latest_packet_t)));
+          //Serial.print(NMEABuffer);
+          NMEAOutD();
+        }
+    }
+#endif
+    if (pflam_type == PFLAM_UCST) {
+        if ((wp[0] & 0x00FFFFFF) != ThisAircraft.addr)
+            return;                 // not addressed to us
+        // <<< this may need to be moved to after decrypt_text_msg()
+    }
+    if (pflam_type >= PFLAM_VER && pflam_type <= PFLAM_METAR)
+        return;                     // not implemented
+    if (pflam_type > PFLAM_UCST)
+        return;                     // invalid
+
+    decrypt_text_msg(wp);  // <<< not clear how this handles UCST
+
+    NMEA_PFLAM(pflam_type, cip, (pflam_type==PFLAM_UCST? (uint8_t *)&cp[4] : (uint8_t *)&cp[0]));
+
+    // try and relay some messages from landed-out aircraft
+    if (ground_status == GROUND_STATUS_AIRBORNE) {
+      if (pflam_type == PFLAM_ATYPE /* || pflam_type == PFLAM_BCST */) {
+        if (strcmp(cp, "DISTRESS") == 0 || strcmp(cp, "LANDED OUT") == 0) {
+            memcpy( (void *)&message_to_relay, buffer, sizeof(latest_packet_t) );
+            have_message_to_relay = true;
+        }
+      }
+    }
+
+    if (pflam_type > PFLAM_ACALL)
+        return;
+
+    // try and fill in callsign from received messages
+    cp[17] = '\0';         // terminator for strcpy() below
+    uint8_t *lastchar = &cip->callsign[CALLSIGN_LEN-1];
+    // if we don't have a callsign, use ATYPE or AREG for now
+    if (pflam_type == PFLAM_ATYPE) {
+        if (cip->callsign[0] != '\0')
+            return;    // already have something
+        *lastchar = '-';    // marks as ATYPE
+    } else if (pflam_type == PFLAM_PNAME) {
+        if (cip->callsign[0] != '\0' && *lastchar != '-')
+            return;    // already have something better
+        *lastchar = '+';    // marks as PNAME
+    } else if (pflam_type == PFLAM_AREG) {
+        if (cip->callsign[0] != '\0' && *lastchar != '-'  && *lastchar != '+')
+            return;    // already have something other than ATYPE or PNAME
+        *lastchar = '!';     // overwrite '?' from computed N-number
+    } else if (pflam_type == PFLAM_ACALL) {    // always copy that
+        *lastchar = '\0';    // overwrite '?' from computed N-number
+    } else {
+        return;        // shouldn't happen
+    }
+    strcpy((char *)cip->callsign, cp);  // assumes CALLSIGN_LEN > text msg len of 17
+}
+
 bool legacy_decode(void *buffer, container_t *this_aircraft, ufo_t *fop) {
 
     legacy_packet_t *pkt = (legacy_packet_t *) buffer;
@@ -516,7 +648,7 @@ bool legacy_decode(void *buffer, container_t *this_aircraft, ufo_t *fop) {
         return false;                 /* ID told in settings to ignore */
 
     if (fop->addr == ThisAircraft.addr) {
-        if (landed_out_mode) {
+        if (ground_status >= GROUND_STATUS_NEED_MED || ground_status == GROUND_STATUS_NEED_RIDE) {
             // if "seeing itself" is via requested relay, show it
             // Serial.println("Received own ID - relayed as landed out");
         } else {
@@ -525,9 +657,11 @@ bool legacy_decode(void *buffer, container_t *this_aircraft, ufo_t *fop) {
         }
     }
 
+    container_t *cip = NULL;
     for (int i=0; i < MAX_TRACKING_OBJECTS; i++) {
       if (Container[i].addr == fop->addr) {
-        if (RF_last_crc != 0 && RF_last_crc == Container[i].last_crc) {
+        cip = &Container[i];
+        if (RF_last_crc != 0 && RF_last_crc == cip->last_crc) {
           //Serial.println("duplicate packet");  // usually duplicated in 2nd time slot
           bool exempt = (Container[i].aircraft_type == AIRCRAFT_TYPE_UNKNOWN
                           && settings->altprotocol != RF_PROTOCOL_NONE
@@ -559,23 +693,15 @@ bool legacy_decode(void *buffer, container_t *this_aircraft, ufo_t *fop) {
     if (pkt->msg_type == 2)
         return latest_decode(buffer, this_aircraft, fop);
 
+    if (pkt->msg_type == 3) {
+        if (cip != NULL && max_alarm_level == ALARM_LEVEL_NONE)
+            pflam_decode(buffer, cip, fop);  // fop already has addr, addr_type
+        return false;
+    }
+
     if (pkt->msg_type != 0) {
-        if (settings->nmea_d || settings->nmea2_d) {
-#if 1
-          if (settings->debug_flags & 0x10000000) {
-            /* output the raw non-traffic packet as a whole, in hex */
-            snprintf_P(NMEABuffer, sizeof(NMEABuffer),
-              PSTR("$PSRFM,%ld,%06X,%d,%s\r\n"),
-              timestamp, fop->addr, pkt->msg_type,
-              bytes2Hex((byte *)buffer, sizeof (latest_packet_t)));
-            //Serial.print(NMEABuffer);
-            NMEAOutD();
-          } else
-#endif
-          {
-            Serial.println("skipping packet msg_type neither 2 nor 0");
-          }
-        }
+        if (settings->nmea_d || settings->nmea2_d)
+            Serial.println("skipping packet msg_type neither 2 nor 0 nor 3");
         return false;
     }
 
@@ -588,7 +714,7 @@ bool legacy_decode(void *buffer, container_t *this_aircraft, ufo_t *fop) {
         NMEAOutD();
 #if defined(USE_SD_CARD)
         if (SD_is_mounted)
-            FlightLogComment(NMEABuffer+2);   // it will prepend LPLT
+            FlightLogComment(NMEABuffer+2);   // it will prepend LSRF
 #endif
     }
 #endif
@@ -763,7 +889,7 @@ bool legacy_decode(void *buffer, container_t *this_aircraft, ufo_t *fop) {
           /* also output the raw (but decrypted) packet as a whole, in hex */
           snprintf_P(NMEABuffer, sizeof(NMEABuffer), PSTR("$PSRFB,%06X,%ld,%s\r\n"),
             fop->addr, timestamp,
-            bytes2Hex((byte *)pkt, sizeof (legacy_packet_t)));
+            bytes2Hex((byte *)pkt, sizeof(legacy_packet_t)));
           NMEAOutD();
         }
       }
@@ -782,6 +908,69 @@ bool flr_adsl_decode(void *buffer, container_t *this_aircraft, ufo_t *fop) {
     return false;
 }
 
+// transmit a periodic text message
+bool pflam_encode(latest_packet_t *pkt)
+{
+    if (have_message_to_relay && ground_status == GROUND_STATUS_AIRBORNE) {
+        // relay messages from other landed-out aircraft instead of ours
+        memcpy ((uint8_t *)pkt, (uint8_t *)&message_to_relay, sizeof(legacy_packet_t));
+        have_message_to_relay = false;
+        return true;
+    }
+
+    bool pflam_output = ((settings->nmea_t & NMEA_T_PFLAM != 0) || (settings->nmea2_t & NMEA_T_PFLAM != 0));
+    if (! pflam_output || max_alarm_level != ALARM_LEVEL_NONE)
+        return false;
+    static uint8_t pflam_type = PFLAM_AREG;
+    const char *txt;
+    ++pflam_type;
+    if (pflam_type == PFLAM_PNAME) {
+        txt = settings->igc_pilot;
+    } else if (pflam_type == PFLAM_ATYPE) {
+        txt = settings->igc_type;
+    } else if (pflam_type == PFLAM_ACALL) {
+        txt = settings->igc_cs;
+        if (txt[0] == '\0')
+            txt = settings->callsign;
+    } else if (pflam_type == PFLAM_VER) {
+        txt = "";  // may be replaced by landed-out message below
+    } else {   // if (pflam_type > PFLAM_VER)
+        pflam_type = PFLAM_AREG;
+        txt = settings->igc_reg;
+    }
+    uint8_t sent_type = pflam_type;
+    if (ground_status >= GROUND_STATUS_NEED_MED || ground_status == GROUND_STATUS_NEED_RIDE) {
+        // in case of distress, or landed out
+        // override aircraft type with message, also send a BCST
+        if (pflam_type == PFLAM_VER)
+            sent_type = PFLAM_BCST;
+        if (sent_type == PFLAM_ATYPE || sent_type == PFLAM_BCST) {
+            if (ground_status >= GROUND_STATUS_NEED_MED)
+                txt = "DISTRESS";
+            else
+                txt = "LANDED OUT";
+        }
+    }
+    if (txt[0] == '\0' || txt[0] == ' ')
+        return false;
+Serial.print("pflam_encode() ");
+Serial.print(sent_type);
+Serial.print(" ");
+Serial.println(txt);
+    uint32_t wp[5];
+    char *bp = (char *) wp;
+    memcpy( bp, txt, 17 );
+    encrypt_text_msg(wp);
+    uint8_t *pp = (uint8_t *) pkt;
+    pp[4] = 0;
+    pp[5] = 0;
+    pp[6] = sent_type;
+    memcpy( &pp[7], bp, 17 );
+    // assume pkt->addr & addr_type have already been filled in
+    pkt->msg_type = 3;
+    return true;
+}
+
 // fill in the data fields in the new 2024 protocol packet
 size_t latest_encode(void *pkt_buffer, container_t *aircraft)
 {
@@ -789,6 +978,15 @@ size_t latest_encode(void *pkt_buffer, container_t *aircraft)
     // addr & addr_type already pre-filled from legacy_encode()
 
     uint32_t timestamp = (uint32_t) RF_time;   // incremented in RF.cpp 300 ms after PPS
+
+    // once in a while transmit a text message instead of position
+    static uint32_t last_pflam_tx = 0;
+    if (timestamp >= last_pflam_tx + 37) {
+        if (pflam_encode(pkt)) {
+            last_pflam_tx = timestamp;
+            return (sizeof(latest_packet_t));
+        }
+    }
 
 #if 0
     uint32_t now_ms = millis();
@@ -814,7 +1012,7 @@ Serial.printf("RF_time=%d but should be %d\r\n", (uint32_t) RF_time, timestamp);
 
     uint8_t aircraft_type = aircraft->aircraft_type;
     if (aircraft == &ThisAircraft) {                    // not relaying some other aircraft
-      if (landed_out_mode) {
+      if (ground_status >= GROUND_STATUS_NEED_MED || ground_status == GROUND_STATUS_NEED_RIDE) {
           aircraft_type = AIRCRAFT_TYPE_UNKNOWN;        // mark this aircraft as landed-out
           if (test_mode)
               pkt->addr_type |= 4;   // >>> as if relayed - for testing how FLARM reacts
@@ -1028,7 +1226,7 @@ size_t legacy_encode(void *pkt_buffer, container_t *aircraft)
         pkt->no_track = aircraft->no_track;
 
     uint8_t aircraft_type = aircraft->aircraft_type;
-    if (landed_out_mode)
+    if (ground_status >= GROUND_STATUS_NEED_MED || ground_status == GROUND_STATUS_NEED_RIDE)
         aircraft_type = AIRCRAFT_TYPE_UNKNOWN;    // marking ourself as landed-out
         // pkt->_unk1 = 1;
     //else if (relay_landed_out)

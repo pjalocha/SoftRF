@@ -114,6 +114,22 @@ enum
 	ALARM_TYPE_OBSTACLE
 };
 
+enum pflam_types
+{
+    PFLAM_AREG,
+    PFLAM_PNAME,
+    PFLAM_ATYPE,
+    PFLAM_ACALL,
+    PFLAM_VER,
+    PFLAM_VHF,
+    PFLAM_TEAM,
+    PFLAM_SENS,
+    PFLAM_AIRPT,
+    PFLAM_METAR,
+    PFLAM_BCST,
+    PFLAM_UCST
+};
+
 enum
 {
 	GNSS_STATUS_NONE,

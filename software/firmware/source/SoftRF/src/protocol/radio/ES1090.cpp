@@ -293,7 +293,7 @@ void save_zone_stats()
         Serial.println(buf+3);     // skip the "RD,"
         statsfile.println(buf+3);
         FlightLogComment(buf);
-        // - it will prepend LPLT, resulting in, e.g., LPLTRD,31,1234,321,45,7
+        // - it will prepend LSRF, resulting in, e.g., LSRFRD,31,1234,321,45,7
     }
     statsfile.close();
 }
@@ -1187,6 +1187,8 @@ static bool parse_identity(int i)
     if (cip->callsign[4]==' ') { cip->callsign[4]='\0';
     }}}} else cip->callsign[8] = '\0';
     cip->callsign[CALLSIGN_LEN-1] = '\0';     // marks as a received callsign, not computed
+
+    NMEA_PFLAM(PFLAM_ACALL, cip, cip->callsign);
 
     return true;
 }
