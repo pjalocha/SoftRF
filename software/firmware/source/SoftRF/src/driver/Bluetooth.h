@@ -195,6 +195,8 @@ typedef struct {
 
 extern IODev_ops_t nRF52_Bluetooth_ops;
 
+//extern bool nRF52_BLE_connected;
+
 #endif /* ESP32 or ARDUINO_ARCH_NRF52 */
 
 #endif /* BLUETOOTHHELPER_H */

@@ -178,6 +178,8 @@ static void ESP32_Bluetooth_setup()
       // Start the service
       pService->start();
 
+#if defined(BLE_SENSORS)
+
       // Create the BLE Service
       pService = pServer->createService(BLEUUID(UUID16_SVC_BATTERY));
 
@@ -192,7 +194,8 @@ static void ESP32_Bluetooth_setup()
       // Start the service
       pService->start();
 
-#if defined(BLE_SENSORS)
+//#if defined(BLE_SENSORS)
+
       // Create the BLE Service
       pService = pServer->createService(BLEUUID(UUID16_SVC_DEVICE_INFORMATION));
 
@@ -271,7 +274,10 @@ static void ESP32_Bluetooth_setup()
       // Start advertising
       BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
       pAdvertising->addServiceUUID(BLEUUID(UART_SERVICE_UUID));
+#if defined(BLE_SENSORS)
       pAdvertising->addServiceUUID(BLEUUID(UUID16_SVC_BATTERY));
+      // >>> why doesn't UUID16_SVC_DEVICE_INFORMATION get advertised?
+#endif
 #if defined(USE_BLE_MIDI)
       pAdvertising->addServiceUUID(BLEUUID(MIDI_SERVICE_UUID));
 #endif /* USE_BLE_MIDI */
@@ -339,13 +345,13 @@ static void ESP32_Bluetooth_loop()
           oldDeviceConnected = deviceConnected;
           //Serial.println("BLE reconnected");
       }
+#if defined(BLE_SENSORS)
       if (deviceConnected && isTimeToBattery()) {
         uint8_t battery_level = Battery_charge();
-#if defined(BLE_SENSORS)
         pBATCharacteristic->setValue(&battery_level, 1);
         pBATCharacteristic->notify();
-#endif
       }
+#endif
     }
     break;
   case BLUETOOTH_OFF:
@@ -1161,6 +1167,8 @@ static void bt_app_av_state_disconnecting(uint16_t event, void *param)
 #include "../protocol/data/GDL90.h"
 #include "../protocol/data/D1090.h"
 
+#if defined(BLE_SENSORS)
+
 /*
  * SensorBox Serivce: aba27100-143b-4b81-a444-edcd0000f020
  * Navigation       : aba27100-143b-4b81-a444-edcd0000f022
@@ -1293,8 +1301,11 @@ bool BLESensBox::notify_sys(uint8_t status)
   return _sensbox_sys.notify(&data, sizeof(sensbox_system_t)) > 0;
 }
 
-static unsigned long BLE_Notify_TimeMarker  = 0;
 static unsigned long BLE_SensBox_TimeMarker = 0;
+
+#endif
+
+static unsigned long BLE_Notify_TimeMarker  = 0;
 
 /*********************************************************************
  This is an example for our nRF52 based Bluefruit LE modules
@@ -1317,12 +1328,15 @@ BLEUart_HM10  bleuart_HM10; // TI UART over BLE
 #if !defined(EXCLUDE_NUS)
 BLEUart       bleuart_NUS;  // Nordic UART over BLE
 #endif /* EXCLUDE_NUS */
+
+//#if defined(BLE_SENSORS)
 BLEBas        blebas;       // battery
+#if defined(BLE_SENSORS)
 BLESensBox    blesens;      // SensBox
+#endif
 
 #if defined(USE_BLE_MIDI)
 BLEMidi       blemidi;
-
 MIDI_CREATE_INSTANCE(BLEMidi, blemidi, MIDI_BLE);
 #endif /* USE_BLE_MIDI */
 
@@ -1342,14 +1356,15 @@ BLEBeacon iBeacon(BeaconUuid, 0x0102, 0x0304, -64);
 
 void startAdv(void)
 {
-  bool no_data = (settings->nmea_out != DEST_BLUETOOTH  &&
-                  settings->gdl90    != DEST_BLUETOOTH &&
-                  settings->d1090    != DEST_BLUETOOTH);
+  bool no_data = (settings->nmea_out  != DEST_BLUETOOTH  &&
+                  settings->nmea_out2 != DEST_BLUETOOTH  &&
+                  settings->gdl90     != DEST_BLUETOOTH  &&
+                  settings->d1090     != DEST_BLUETOOTH);
 
   // Advertising packet
 
 #if defined(USE_IBEACON)
-  if (no_data && settings->volume >= BUZZER_OFF) {
+  if (no_data /* && settings->volume >= BUZZER_OFF */ ) {
     uint32_t id = SoC->getChipId();
     uint16_t major = (id >> 16) & 0x0000FFFF;
     uint16_t minor = (id      ) & 0x0000FFFF;
@@ -1380,11 +1395,11 @@ void startAdv(void)
     }
   }
 
-#if defined(BLE_SENSORS)
+//#if defined(BLE_SENSORS)
   // Secondary Scan Response packet (optional)
   // Since there is no room for 'Name' in Advertising packet
   Bluefruit.ScanResponse.addName();
-#endif
+//#endif
 
   /* Start Advertising
    * - Enable auto advertising if disconnected
@@ -1401,9 +1416,16 @@ void startAdv(void)
   Bluefruit.Advertising.start(0);                // 0 = Don't stop advertising after n seconds
 }
 
+// have a way to check whether BLE is connected:
+//bool nRF52_BLE_connected = false;
+// or maybe can call Bluefruit.connected() instead?
+// or maybe Bluefruit.connected() && (bleuart_HM10.notifyEnabled() || bleuart_NUS.notifyEnabled())
+
 // callback invoked when central connects
 void connect_callback(uint16_t conn_handle)
 {
+    //nRF52_BLE_connected = true;
+
 #if DEBUG_BLE
   // Get the reference to current connection
   BLEConnection* connection = Bluefruit.Connection(conn_handle);
@@ -1423,6 +1445,8 @@ void connect_callback(uint16_t conn_handle)
  */
 void disconnect_callback(uint16_t conn_handle, uint8_t reason)
 {
+    //nRF52_BLE_connected = false;
+
 #if DEBUG_BLE
   (void) conn_handle;
   (void) reason;
@@ -1449,10 +1473,11 @@ void nRF52_Bluetooth_setup()
       BT_name += String(SoC->getChipId() & 0x00FFFFFFU, HEX);
   }
 
-#if 0
+#if 1
   // Setup the BLE LED to be enabled on CONNECT
   // Note: This is actually the default behavior, but provided
   // here in case you want to control this LED manually via PIN 19
+  //    >>> where is "LED_BLUE" defined?
   if (hw_info.model == SOFTRF_MODEL_BADGE)
       Bluefruit.autoConnLed(LED_BLUE == SOC_GPIO_LED_BLE ? true : false);
   else
@@ -1473,7 +1498,7 @@ void nRF52_Bluetooth_setup()
   // To be consistent OTA DFU should be added first if it exists
   bledfu.begin();
 
-#if defined(BLE_SENSORS)
+//#if defined(BLE_SENSORS)
   // Configure and Start Device Information Service
   bledis.setManufacturer(nRF52_Device_Manufacturer);
   bledis.setModel(nRF52_Device_Model);
@@ -1481,7 +1506,7 @@ void nRF52_Bluetooth_setup()
                         Hardware_Rev[3] : Hardware_Rev[hw_info.revision]);
   bledis.setSoftwareRev(SOFTRF_FIRMWARE_VERSION);
   bledis.begin();
-#endif
+//#endif
 
   // Configure and Start BLE Uart Service
   bleuart_HM10.begin();
@@ -1490,11 +1515,12 @@ void nRF52_Bluetooth_setup()
   bleuart_NUS.bufferTXD(true);
 #endif /* EXCLUDE_NUS */
 
-#if defined(BLE_SENSORS)
+//#if defined(BLE_SENSORS)
   // Start BLE Battery Service
   blebas.begin();
   blebas.write(100);
 
+#if defined(BLE_SENSORS)
   // Start SensBox Service
   blesens.begin();
 #endif
@@ -1514,7 +1540,10 @@ void nRF52_Bluetooth_setup()
 #endif
 
   BLE_Notify_TimeMarker  = millis();
+
+#if defined(BLE_SENSORS)
   BLE_SensBox_TimeMarker = millis();
+#endif
 }
 
 /*********************************************************************
@@ -1611,11 +1640,12 @@ static void nRF52_Bluetooth_loop()
     BLE_Notify_TimeMarker = millis();
   }
 
-#if defined(BLE_SENSORS)
+//#if defined(BLE_SENSORS)
   if (isTimeToBattery()) {
     blebas.write(Battery_charge());
   }
 
+#if defined(BLE_SENSORS)
   if (Bluefruit.connected() && isTimeToSensBox()) {
     uint8_t sens_status = isValidFix() ? GNSS_STATUS_3D_MOVING : GNSS_STATUS_NONE;
     blesens.notify_nav (sens_status);
@@ -1623,6 +1653,7 @@ static void nRF52_Bluetooth_loop()
     blesens.notify_gps2(sens_status);
     blesens.notify_sys (sens_status);
     BLE_SensBox_TimeMarker = millis();
+    yield();
   }
 #endif
 }
@@ -1652,22 +1683,24 @@ static int nRF52_Bluetooth_read()
 
 static size_t nRF52_Bluetooth_write(const uint8_t *buffer, size_t size)
 {
-  size_t rval = size;
-
-  if ( !Bluefruit.connected() ) {
-    return rval;
+  if ( !Bluefruit.connected() || size == 0) {
+    return size;
   }
 
+  size_t rval;
+
   /* Give priority to HM-10 output */
-  if ( bleuart_HM10.notifyEnabled() && size > 0) {
-    return bleuart_HM10.write(buffer, size);
+  if ( bleuart_HM10.notifyEnabled() ) {
+    rval = bleuart_HM10.write(buffer, size);
   }
 
 #if !defined(EXCLUDE_NUS)
-  if ( bleuart_NUS.notifyEnabled() && size > 0) {
+  else if ( bleuart_NUS.notifyEnabled() ) {
     rval = bleuart_NUS.write(buffer, size);
   }
 #endif /* EXCLUDE_NUS */
+
+  yield();
 
   return rval;
 }

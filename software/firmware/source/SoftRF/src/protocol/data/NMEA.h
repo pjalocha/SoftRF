@@ -62,14 +62,16 @@ void NMEAOutD(void);           // without checksum
 void NMEA_GGA(void);
 
 extern char NMEABuffer[NMEA_BUFFER_SIZE];
-extern char CONFBuffer[NMEA_BUFFER_SIZE];
+//extern char CONFBuffer[NMEA_BUFFER_SIZE];
+#define CONFBuffer NMEABuffer
 unsigned int NMEA_add_checksum(char *buf=NMEABuffer);
 
-void sendPFLAJ();
+void NMEA_PFLAJ(void);
+void NMEA_PFLAM(uint8_t type, container_t *cip, uint8_t *msg);
 
 int WiFi_transmit_TCP(const char *buf, size_t size);
 
-char *bytes2Hex(byte *, size_t);
+char *bytes2Hex(byte *, size_t, bool nullterm=false);
 
 extern uint8_t NMEA_Source;
 extern char GPGGA_Copy[NMEA_BUFFER_SIZE];
