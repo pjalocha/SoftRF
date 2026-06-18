@@ -417,11 +417,15 @@ int16_t SX1278::setGain(uint8_t gain) {
   } else if(modem == RADIOLIB_SX127X_FSK_OOK) {
     // set gain
     if(gain == 0) {
-      // gain set to 0, enable AGC loop
+      // MB: added setting of LNA boost, along with max gain:
+      state |= mod->SPIsetRegValue(RADIOLIB_SX127X_REG_LNA, (1 << 5) | RADIOLIB_SX127X_LNA_BOOST_ON);
+      // enable AGC loop (which may make the max gain irrelevant)
       state |= mod->SPIsetRegValue(RADIOLIB_SX127X_REG_RX_CONFIG, RADIOLIB_SX127X_AGC_AUTO_ON, 3, 3);
     } else {
       state |= mod->SPIsetRegValue(RADIOLIB_SX127X_REG_RX_CONFIG, RADIOLIB_SX1278_AGC_AUTO_OFF, 3, 3);
-      state |= mod->SPIsetRegValue(RADIOLIB_SX127X_REG_LNA, (gain << 5) | RADIOLIB_SX127X_LNA_BOOST_ON);
+      // MB: LNA boost only if max gain:
+      state |= mod->SPIsetRegValue(RADIOLIB_SX127X_REG_LNA, (gain << 5) |
+          (gain==1? RADIOLIB_SX127X_LNA_BOOST_ON : RADIOLIB_SX127X_LNA_BOOST_OFF));
     }
 
   }

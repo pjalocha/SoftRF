@@ -636,10 +636,6 @@ int16_t SX126x::readData(uint8_t* data, size_t len) {
   uint8_t offset = 0;
   size_t length = getPacketLength(true, &offset);
 
-  // MB: abort if nothing was received
-  if (length == 0)
-    return RADIOLIB_ERR_PACKET_TOO_SHORT;
-
   if((len != 0) && (len < length)) {
     // user requested less data than we got, only return what was requested
     length = len;
@@ -651,6 +647,10 @@ int16_t SX126x::readData(uint8_t* data, size_t len) {
 
   // clear interrupt flags
   state = clearIrqStatus();
+
+  // MB: abort if nothing was received
+  if (length == 0)
+    return RADIOLIB_ERR_PACKET_TOO_SHORT;
 
   // check if CRC failed - this is done after reading data to give user the option to keep them
   RADIOLIB_ASSERT(crcState);

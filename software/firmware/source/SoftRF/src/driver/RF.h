@@ -54,11 +54,13 @@
                              P3I_PAYLOAD_SIZE+P3I_PAYLOAD_OFFSET+P3I_CRC_SIZE, FANET_PAYLOAD_SIZE)
 #endif
 #else
-#if !defined(EXCLUDE_UAT978)
-#define MAX_PKT_SIZE 48
-#else
-#define MAX_PKT_SIZE 32
-#endif
+//#if !defined(EXCLUDE_UAT978)
+//#define MAX_PKT_SIZE 48
+//#else
+//#define MAX_PKT_SIZE 32
+//#define MAX_PKT_SIZE 36      // allow FANET name packets, 4 (header) + up to 32 (name)
+#define MAX_PKT_SIZE 64        // allow FANET SOS message up to 60
+//#endif
 #endif
 
 //#define RADIOLIB_MAX_DATA_LENGTH    128
@@ -128,7 +130,7 @@ typedef struct rfchip_ops_struct {
     // - can keep out of here if only called from receive() and transmit()
   void (*setfreq)(uint32_t);
   uint8_t (*receive)(uint8_t *packet);
-  int16_t (*transmit)(uint8_t *packet, uint8_t length);
+  int16_t (*transmit)(uint8_t *packet, size_t length);
   void (*shutdown)();
 } rfchip_ops_t;
 
@@ -164,6 +166,7 @@ void    RF_SetChannel(void);
 void    RF_loop(void);
 bool    RF_Transmit_Happened();
 bool    RF_Transmit_Ready(bool wait);
+void    RF_Transmit_Postpone(void);
 size_t  RF_Encode(container_t *cip, bool wait);
 bool    RF_Transmit(size_t size, bool wait);
 bool    RF_Receive(void);
@@ -199,8 +202,9 @@ extern const char *Protocol_ID[];
 extern const char *dual_protocol_lbl[];
 extern uint32_t RF_last_crc;
 extern int8_t RF_last_rssi;
-extern int8_t which_rx_try;
+//extern int8_t which_rx_try;
 extern uint8_t RF_last_protocol;
+extern uint8_t RF_last_rx_len;      // for variable-length FANET packets
 
 extern uint32_t rx_packets_counter;
 extern uint32_t tx_packets_counter;

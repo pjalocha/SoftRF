@@ -34,6 +34,7 @@
 #include "Settings.h"
 #include "Battery.h"
 #include "../ui/Web.h"
+#include "../protocol/data/NMEA.h"
 #if !defined(EXCLUDE_MAVLINK)
 #include "../protocol/data/MAVLink.h"
 #endif /* EXCLUDE_MAVLINK */
@@ -68,10 +69,11 @@ uint32_t adsb_packets_counter = 0;
 static uint32_t invalid_manchester_packets = 0;
 static uint8_t  invalid_manchester_counter = 0;
 
-int8_t which_rx_try = 0;
+//int8_t which_rx_try = 0;
 int8_t RF_last_rssi = 0;
-uint32_t RF_last_crc = 0;
-uint8_t RF_last_protocol = 0;
+uint32_t RF_last_crc = 0;            // for detection of duplicate packets
+uint8_t RF_last_protocol = 0;        // for flr_adsl simultaneous reception
+uint8_t RF_last_rx_len = 0;          // for variable-length FANET packets
 uint8_t current_RX_protocol;
 uint8_t current_TX_protocol;
 uint8_t dual_protocol = RF_SINGLE_PROTOCOL;
@@ -172,6 +174,7 @@ const uint8_t whitening_pattern[] PROGMEM = { 0x05, 0xb4, 0x05, 0xae, 0x14, 0xda
   0xcf, 0x08, 0xe6, 0xf2, 0x07, 0xd0, 0x12, 0xc2, 0x09, 0x34, 0x20 };
 */
 
+#if 0
 String Bin2Hex(byte *buffer, size_t size)
 {
   String str = "";
@@ -181,6 +184,7 @@ String Bin2Hex(byte *buffer, size_t size)
   }
   return str;
 }
+#endif
 
 uint8_t parity(uint32_t x) {
     uint8_t parity=0;
@@ -268,6 +272,7 @@ static void calc_txpower()
 
 static void set_initial_protocol(uint8_t protocol)   // only used during RF_setup()
 {
+  RF_FreqPlan.setPlan(settings->band, protocol);
   switch (protocol)
   {
   case RF_PROTOCOL_ADSL:
@@ -349,7 +354,7 @@ if (! receive_active)   // polling said a packet was received
 Serial.print("rf_chip->receive() returned ");
 Serial.print(size);
 Serial.println(" bytes:");
-Serial.println(Bin2Hex((byte *)RL_rxPacket, size));
+Serial.println(bytes2Hex((byte *)RL_rxPacket, size));
 }
 }
 #endif
@@ -357,10 +362,14 @@ Serial.println(Bin2Hex((byte *)RL_rxPacket, size));
   if (size == 0)
       return false;
 
+#if 0
   // for reasons unknown, RadioLib returned RSSIs much lower than BASICMAC
-  // for now fudge it:
-  if (RF_last_rssi < -30)
-      RF_last_rssi += 30;
+  // may want to fudge it:
+  if (rf_chip->type == RF_IC_SX1262) {
+      if (RF_last_rssi < -30)
+          RF_last_rssi += 30;
+  }
+#endif
 
   unsigned crc_type = curr_rx_protocol_ptr->crc_type;
 //  if (curr_rx_protocol_ptr == &flr_adsl_proto_desc)
@@ -415,7 +424,7 @@ byte1, byte2, FLR_ID_BYTE_1, FLR_ID_BYTE_2);
 
 //Serial.print("size=");
 //Serial.println(size);
-//Serial.println(Bin2Hex((byte *) RL_rxPacket, size));
+//Serial.println(bytes2Hex((byte *) RL_rxPacket, size));
 
   u1_t offset = curr_rx_protocol_ptr->payload_offset;    // only nonzero for PAW
 
@@ -504,12 +513,14 @@ Serial.println("invalid Manchester");
 #if 0
 Serial.print("After bit-shifting and Manchester decoding, size: ");
 Serial.println(size);
-Serial.println(Bin2Hex((byte *)RxBuffer, size));
+Serial.println(bytes2Hex((byte *)RxBuffer, size));
 #endif
 
-//Serial.println(Bin2Hex((byte *) RxBuffer, size));
+//Serial.println(bytes2Hex((byte *) RxBuffer, size));
 
   // now can compute and check the CRC
+
+  uint8_t size2 = size - curr_rx_protocol_ptr->crc_size;
 
   switch (crc_type)
   {
@@ -547,7 +558,6 @@ Serial.println(Bin2Hex((byte *)RxBuffer, size));
       break;
     }
 
-    uint8_t size2 = size - curr_rx_protocol_ptr->crc_size;
     for (i = 0; i < size2; i++)
     {
 
@@ -626,6 +636,7 @@ Serial.println("PAW external CRC8 wrong");
     break;
   //case RF_CHECKSUM_TYPE_NONE:
   default:
+    RF_last_rx_len = size2;    // for variable-length FANET packets
     success = true;
     break;
   }
@@ -634,8 +645,8 @@ Serial.println("PAW external CRC8 wrong");
 if (success && settings->debug_flags) {
 uint8_t protocol = curr_rx_protocol_ptr->type;
 if (rx_flr_adsl)  protocol = RF_last_protocol;
-Serial.printf("RX in prot %d, time slot %d, sec %d(%d) + %d ms\r\n",
-    protocol, RF_current_slot, RF_time, (RF_time & 0x0F), millis()-ref_time_ms);
+Serial.printf("RX in prot %d, time slot %d, sec %d(%d) + %d ms, RSSI %d\r\n",
+    protocol, RF_current_slot, RF_time, (RF_time & 0x0F), millis()-ref_time_ms, RF_last_rssi);
 }
 #endif
 
@@ -676,7 +687,7 @@ static uint8_t transmit(uint8_t passed_size) {
     break;
   }
 
-  uint8_t length = 0;
+  size_t length = 0;
 
   switch (curr_tx_protocol_ptr->type)
   {
@@ -710,9 +721,13 @@ static uint8_t transmit(uint8_t passed_size) {
     break;
   }
 
-  uint8_t size   = curr_tx_protocol_ptr->payload_size;
-  if (size != passed_size)
+  uint8_t size = curr_tx_protocol_ptr->payload_size;
+  if (curr_tx_protocol_ptr->type == RF_PROTOCOL_FANET) {
+      // FANET uses variable size packets
+      size = passed_size;
+  } else if (size != passed_size) {
       Serial.printf("size %d != passed_size %d\r\n", size, passed_size);
+  }
   //uint8_t offset = curr_tx_protocol_ptr->payload_offset;    // only nonzero for PAW
 
 //  if (curr_tx_protocol_ptr->crc_type == RF_CHECKSUM_TYPE_CRC_MODES) {
@@ -771,7 +786,7 @@ static uint8_t transmit(uint8_t passed_size) {
 /*
 if (settings->debug_flags & DEBUG_DEEPER2) {
 Serial.println("Copied into RL_txPacket:");
-Serial.println(Bin2Hex((byte *) RL_txPacket, length));
+Serial.println(bytes2Hex((byte *) RL_txPacket, length));
 }
 */
   switch (curr_tx_protocol_ptr->crc_type)
@@ -818,13 +833,16 @@ Serial.println(Bin2Hex((byte *) RL_txPacket, length));
     //memset(RL_txPacket.payload, 0, sizeof(RL_txPacket.payload));   why ???
     return length;
 
-  } else if (rl_state == RADIOLIB_ERR_PACKET_TOO_LONG) {
-    // the supplied packet was longer than 256 bytes
-    Serial.println(F("tx too long!"));
-
   } else if (rl_state == RADIOLIB_ERR_TX_TIMEOUT) {
     // timeout occured while transmitting packet
     Serial.println(F("tx timeout!"));
+    // perhaps tx happened anyway, but interrupt was not working
+    // - return value as if tx happened:
+    return length;
+
+  } else if (rl_state == RADIOLIB_ERR_PACKET_TOO_LONG) {
+    // the supplied packet was longer than 256 bytes
+    Serial.println(F("tx too long!"));
 
   } else {
     // some other error occurred
@@ -869,6 +887,9 @@ static void set_channel(uint8_t channel)
   static uint8_t prev_channel  = RF_CHANNEL_NONE;
   static uint8_t prev_protocol = RF_PROTOCOL_NONE;
 
+  if (! RF_ready)
+      return;          // leave prev == NONE
+
   if (channel != prev_channel || RF_FreqPlan.Protocol != prev_protocol) {
 
     uint32_t frequency = RF_FreqPlan.getChanFrequency(channel);
@@ -894,7 +915,7 @@ static void set_channel(uint8_t channel)
       frequency = frequency + (fc * 1000);
     }
 
-    if (RF_ready && rf_chip)
+    if (rf_chip)
       rf_chip->setfreq(frequency);
 
 if (settings->debug_flags & DEBUG_DEEPER2) {
@@ -912,6 +933,7 @@ byte RF_setup(void)
   // resurrected the option of auto-band:
   //if (settings->band == RF_BAND_AUTO)
   //    settings->band == RF_BAND_EU;
+
   // "UK" freqs now mapped to EU:
   if (settings->band == RF_BAND_UK)
       settings->band == RF_BAND_EU;
@@ -929,11 +951,13 @@ byte RF_setup(void)
       settings->altprotocol = RF_PROTOCOL_NONE;
 
   set_initial_protocol(settings->altprotocol==RF_PROTOCOL_NONE? settings->rf_protocol : settings->altprotocol);
+  //RF_FreqPlan.setPlan(settings->band, settings->altprotocol);
   altprotocol_ptr = mainprotocol_ptr;
   altprotocol_encode = protocol_encode;
   altprotocol_decode = protocol_decode;
 
   set_initial_protocol(settings->rf_protocol);   // sets mainprotocol_ptr
+  //RF_FreqPlan.setPlan(settings->band, settings->rf_protocol);
   curr_rx_protocol_ptr = mainprotocol_ptr;
   curr_tx_protocol_ptr = mainprotocol_ptr;
   mainprotocol_encode = protocol_encode;
@@ -943,8 +967,6 @@ byte RF_setup(void)
 
   Serial.printf("Main RF protocol: %d\r\n", mainprotocol_ptr->type);
   Serial.printf(" Alt RF protocol: %d\r\n", (settings->altprotocol==RF_PROTOCOL_NONE? 0 : altprotocol_ptr->type));
-
-  RF_FreqPlan.setPlan(settings->band, current_RX_protocol);
 
   if (settings->rf_protocol==RF_PROTOCOL_LATEST && settings->altprotocol==RF_PROTOCOL_ADSL) {
        if (settings->flr_adsl) {     // use dual-protocol reception trick
@@ -1023,7 +1045,9 @@ byte RF_setup(void)
   if (rf_chips_probe() == false)
       return RF_IC_NONE;
 
-  calc_txpower();
+  set_channel(0);   // tries to initialize cur_freq - not if BAND_AUTO
+
+  calc_txpower();   // does nothing if BAND_AUTO
 
   return rf_chip->type;
 }
@@ -1035,21 +1059,6 @@ void RF_chip_channel(uint8_t protocol)
     RF_current_chan = RF_FreqPlan.getChannel((time_t)RF_time, RF_current_slot, OGN);
     set_channel(RF_current_chan);
 }
-
-#if 0
-void RF_chip_reset(uint8_t protocol)
-{
-#if defined(USE_BASICMAC)
-#if !defined(EXCLUDE_SX12XX)
-    if (rf_chip == &sx1276_ops || rf_chip == &sx1262_ops)
-        sx12xx_resetup();
-#endif
-#endif
-    RF_chip_channel(protocol);
-//Serial.printf("reset to Prot %d at millis %d, tx ok %d - %d, gd to %d\r\n",
-//current_RX_protocol, millis(), TxTimeMarker, TxEndMarker, RF_OK_until);
-}
-#endif
 
 #if 0
 /* original code, no longer used */
@@ -1329,13 +1338,9 @@ void set_protocol_for_slot()
   rx_flr_adsl = (curr_rx_protocol_ptr == &flr_adsl_proto_desc);
 #endif
 
-  //if (current_RX_protocol != prev_protocol)
-  //    RF_FreqPlan.setPlan(settings->band, current_RX_protocol);
-
   if (prev_rx_protocol_ptr != curr_rx_protocol_ptr) {
       RF_FreqPlan.setPlan(settings->band, current_RX_protocol);
       calc_txpower();
-      //RF_chip_reset(current_RX_protocol);
       // tx will switch to curr_tx_protocol_ptr
   }
   RF_chip_channel(current_RX_protocol);
@@ -1358,6 +1363,7 @@ void RF_loop()
             return;   // band is not known yet
         // if settings->band was AUTO, changed in SoftRF.ino after GNSS fix
         RF_FreqPlan.setPlan(settings->band, current_RX_protocol);
+        calc_txpower();
     }
     RF_ready = true;
   }
@@ -1546,6 +1552,15 @@ bool RF_Transmit_Ready(bool wait)
     return (now_ms >= (wait? TxTimeMarker : RF_OK_from) && now_ms < TxEndMarker);
 }
 
+// postpone transmission by one time slot
+void RF_Transmit_Postpone()
+{
+    if (TxTimeMarker  != 0 && TxTimeMarker  < TxEndMarker)
+        TxTimeMarker = TxEndMarker;
+    if (TxTimeMarker2 != 0 && TxTimeMarker2 < TxEndMarker)
+        TxTimeMarker2 += 1000;
+}
+
 size_t RF_Encode(container_t *fop, bool wait)
 {
   if (settings->txpower == RF_TX_POWER_OFF)
@@ -1638,8 +1653,8 @@ bool RF_Transmit(size_t size, bool wait)   // called with no-wait only for air-r
 if (settings->debug_flags & DEBUG_DEEPER) {
 Serial.printf("TX in protocol %d at %d ms, size=%d, RF_tx_size=%d\r\n",
     current_TX_protocol, millis()-ref_time_ms, size, RF_tx_size);
-    Serial.println(Bin2Hex((byte *) TxBuffer, size));
-  //Serial.println(Bin2Hex((byte *) RL_txPacket, RF_tx_size));
+    Serial.println(bytes2Hex((byte *) TxBuffer, size));
+  //Serial.println(bytes2Hex((byte *) RL_txPacket, RF_tx_size));
 }
         }
 
@@ -1696,7 +1711,7 @@ OurTime, ms, (int)gnss.time.minute(), (int)gnss.time.second(), (RF_time & 0x0F),
         StdOut.print(F("$PSRFO,"));
         StdOut.print((uint32_t) timestamp);
         StdOut.print(F(","));
-        StdOut.println(Bin2Hex((byte *) RL_txPacket, RF_tx_size));
+        StdOut.println(bytes2Hex((byte *) RL_txPacket, RF_tx_size));
                                // RF_Payload_Size(current_TX_protocol)));
       }
 

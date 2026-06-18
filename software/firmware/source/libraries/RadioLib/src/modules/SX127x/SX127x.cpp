@@ -146,11 +146,15 @@ int16_t SX127x::beginFSK(const uint8_t* chipVersions, uint8_t numVersions, float
   RADIOLIB_ASSERT(state);
 
   // set AFC&AGC trigger to RSSI (both in OOK and FSK)
-  state = SX127x::setAFCAGCTrigger(RADIOLIB_SX127X_RX_TRIGGER_RSSI_INTERRUPT);
+  //state = SX127x::setAFCAGCTrigger(RADIOLIB_SX127X_RX_TRIGGER_RSSI_INTERRUPT);
+  // MB: trigger on preamble instead
+  state = SX127x::setAFCAGCTrigger(RADIOLIB_SX127X_RX_TRIGGER_PREAMBLE_DETECT);
   RADIOLIB_ASSERT(state);
 
-  // enable AFC
-  state = SX127x::setAFC(false);
+  // enable AFC (MB: actually disables AFC)
+  //state = SX127x::setAFC(false);
+  // MB: enable AFC
+  state = SX127x::setAFC(true);
   RADIOLIB_ASSERT(state);
 
   // set receiver bandwidth
@@ -611,11 +615,6 @@ int16_t SX127x::readData(uint8_t* data, size_t len) {
 
   if(modem == RADIOLIB_SX127X_LORA) {
 
-    // MB: abort if nothing was received
-    /* FANET (LoRa) LMIC IRQ handler may deliver empty packets here when CRC is invalid. */
-    if (length == 0)
-      return RADIOLIB_ERR_PACKET_TOO_SHORT;
-
     // check packet header integrity
     if(this->crcEnabled && (state == RADIOLIB_ERR_NONE)  && (this->mod->SPIgetRegValue(RADIOLIB_SX127X_REG_HOP_CHANNEL, 6, 6) == 0)) {
       // CRC is disabled according to packet header and enabled according to user
@@ -649,6 +648,11 @@ int16_t SX127x::readData(uint8_t* data, size_t len) {
 
   // clear interrupt flags
   clearIrqFlags(RADIOLIB_SX127X_FLAGS_ALL);
+
+  // MB: abort if nothing was received
+  /* FANET (LoRa) LMIC IRQ handler may deliver empty packets here when CRC is invalid. */
+  if (length == 0)
+    return RADIOLIB_ERR_PACKET_TOO_SHORT;
 
   return(state);
 }
@@ -973,7 +977,14 @@ int16_t SX127x::setRxBandwidth(float rxBw) {
   RADIOLIB_ASSERT(state);
 
   // set Rx bandwidth
-  return(this->mod->SPIsetRegValue(RADIOLIB_SX127X_REG_RX_BW, calculateBWManExp(rxBw), 4, 0));
+  //return(this->mod->SPIsetRegValue(RADIOLIB_SX127X_REG_RX_BW, calculateBWManExp(rxBw), 4, 0));
+
+  // MB: added check for valid values
+  uint8_t regval = calculateBWManExp(rxBw);
+  if (regval == 0)
+      return RADIOLIB_ERR_INVALID_RX_BANDWIDTH;
+
+  return(this->mod->SPIsetRegValue(RADIOLIB_SX127X_REG_RX_BW, regval, 4, 0));
 }
 
 int16_t SX127x::setAFCBandwidth(float rxBw) {
@@ -989,7 +1000,14 @@ int16_t SX127x::setAFCBandwidth(float rxBw) {
   RADIOLIB_ASSERT(state);
 
   // set AFC bandwidth
-  return(this->mod->SPIsetRegValue(RADIOLIB_SX127X_REG_AFC_BW, calculateBWManExp(rxBw), 4, 0));
+  //return(this->mod->SPIsetRegValue(RADIOLIB_SX127X_REG_AFC_BW, calculateBWManExp(rxBw), 4, 0));
+
+  // MB: added check for valid values
+  uint8_t regval = calculateBWManExp(rxBw);
+  if (regval == 0)
+      return RADIOLIB_ERR_INVALID_RX_BANDWIDTH;
+
+  return(this->mod->SPIsetRegValue(RADIOLIB_SX127X_REG_AFC_BW, regval, 4, 0));
 }
 
 int16_t SX127x::setAFC(bool isEnabled) {
@@ -999,7 +1017,13 @@ int16_t SX127x::setAFC(bool isEnabled) {
   }
 
   //set AFC auto on/off
-  return(this->mod->SPIsetRegValue(RADIOLIB_SX127X_REG_RX_CONFIG, isEnabled ? RADIOLIB_SX127X_AFC_AUTO_ON : RADIOLIB_SX127X_AFC_AUTO_OFF, 4, 4));
+  int16_t state = this->mod->SPIsetRegValue(RADIOLIB_SX127X_REG_RX_CONFIG, isEnabled ? RADIOLIB_SX127X_AFC_AUTO_ON : RADIOLIB_SX127X_AFC_AUTO_OFF, 4, 4);
+
+  // MB: turn on AFC auto-clear
+  if (isEnabled)
+      this->mod->SPIsetRegValue(RADIOLIB_SX127X_REG_AFC_FEI, 0x01);
+
+  return state;
 }
 
 int16_t SX127x::setAFCAGCTrigger(uint8_t trigger) {
@@ -1016,9 +1040,13 @@ int16_t SX127x::setSyncWord(uint8_t* syncWord, size_t len) {
   uint8_t modem = getActiveModem();
   if(modem == RADIOLIB_SX127X_FSK_OOK) {
 
+    // MB: turn off auto-restart:
+    int16_t state = this->mod->SPIsetRegValue(RADIOLIB_SX127X_REG_SYNC_CONFIG, RADIOLIB_SX127X_AUTO_RESTART_RX_MODE_OFF, 7, 6);
+    RADIOLIB_ASSERT(state);
+
     // disable sync word in case len is 0
     if(len == 0) {
-      int16_t state = this->mod->SPIsetRegValue(RADIOLIB_SX127X_REG_SYNC_CONFIG, RADIOLIB_SX127X_SYNC_OFF, 4, 4);
+      state = this->mod->SPIsetRegValue(RADIOLIB_SX127X_REG_SYNC_CONFIG, RADIOLIB_SX127X_SYNC_OFF, 4, 4);
       return(state);
     }
 
@@ -1032,7 +1060,7 @@ int16_t SX127x::setSyncWord(uint8_t* syncWord, size_t len) {
     }
 
     // enable sync word recognition
-    int16_t state = this->mod->SPIsetRegValue(RADIOLIB_SX127X_REG_SYNC_CONFIG, RADIOLIB_SX127X_SYNC_ON, 4, 4);
+    state = this->mod->SPIsetRegValue(RADIOLIB_SX127X_REG_SYNC_CONFIG, RADIOLIB_SX127X_SYNC_ON, 4, 4);
     state |= this->mod->SPIsetRegValue(RADIOLIB_SX127X_REG_SYNC_CONFIG, len - 1, 2, 0);
     RADIOLIB_ASSERT(state);
 
@@ -1677,7 +1705,9 @@ int16_t SX127x::configFSK() {
   RADIOLIB_ASSERT(state);
 
   // enable preamble detector
-  state = this->mod->SPIsetRegValue(RADIOLIB_SX127X_REG_PREAMBLE_DETECT, RADIOLIB_SX127X_PREAMBLE_DETECTOR_ON | RADIOLIB_SX127X_PREAMBLE_DETECTOR_2_BYTE | RADIOLIB_SX127X_PREAMBLE_DETECTOR_TOL);
+  //state = this->mod->SPIsetRegValue(RADIOLIB_SX127X_REG_PREAMBLE_DETECT, RADIOLIB_SX127X_PREAMBLE_DETECTOR_ON | RADIOLIB_SX127X_PREAMBLE_DETECTOR_2_BYTE | RADIOLIB_SX127X_PREAMBLE_DETECTOR_TOL);
+  // MB: change to 1 byte:
+  state = this->mod->SPIsetRegValue(RADIOLIB_SX127X_REG_PREAMBLE_DETECT, RADIOLIB_SX127X_PREAMBLE_DETECTOR_ON | RADIOLIB_SX127X_PREAMBLE_DETECTOR_1_BYTE | RADIOLIB_SX127X_PREAMBLE_DETECTOR_TOL);
 
   return(state);
 }
@@ -2115,5 +2145,19 @@ int16_t SX127x::setLowBatteryThreshold(int8_t level, uint32_t pin) {
   }
   return(RADIOLIB_ERR_INVALID_DIO_PIN);
 }
+
+#if 0
+//MB: temporary debug report:
+void SX127x::showsomeregs() {
+Serial.print("sx1276 reg 0x0D: ");
+Serial.println(this->mod->SPIreadRegister(0x0D), HEX);
+Serial.print("sx1276 reg 0x12: ");
+Serial.println(this->mod->SPIreadRegister(0x12), HEX);
+Serial.print("sx1276 reg 0x1F: ");
+Serial.println(this->mod->SPIreadRegister(0x1F), HEX);
+Serial.print("sx1276 reg 0x27: ");
+Serial.println(this->mod->SPIreadRegister(0x27), HEX);
+}
+#endif
 
 #endif

@@ -65,6 +65,10 @@ int16_t SX1276::beginFSK(float freq, float br, float freqDev, float rxBw,
   state = setOutputPower(power);
   RADIOLIB_ASSERT(state);
 
+  // MB: added call to setGain() to get the LNA boost (along with max gain and AGC)
+  state = setGain(0);
+  RADIOLIB_ASSERT(state);
+
   if(enableOOK) {
     state = setDataShapingOOK(RADIOLIB_SHAPING_NONE);
     RADIOLIB_ASSERT(state);

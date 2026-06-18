@@ -10,7 +10,7 @@ LR1110::LR1110(Module* mod) : LR11x0(mod) {
 // mb: added "fast" option
 int16_t LR1110::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_t syncWord, int8_t power, uint16_t preambleLength, float tcxoVoltage, bool fast) {
   // execute common part
-  int16_t state = LR11x0::begin(bw, sf, cr, syncWord, preambleLength, tcxoVoltage, fast);
+  int16_t state = LR11x0::begin(bw, sf, cr, syncWord, preambleLength, tcxoVoltage, false, fast);  // "false" for "high"
   RADIOLIB_ASSERT(state);
 
   // configure publicly accessible settings

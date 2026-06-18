@@ -1263,6 +1263,9 @@ class SX127x: public PhysicalLayer {
     // mb: added non-FP version
     int8_t getRSSIint(void);
 
+//MB: temporary debug report:
+//void showsomeregs();
+
 #if !RADIOLIB_GODMODE && !RADIOLIB_LOW_LEVEL
   protected:
 #endif
