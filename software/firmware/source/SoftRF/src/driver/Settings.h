@@ -160,6 +160,26 @@ enum
 	FLIGHT_LOG_TRAFFIC
 };
 
+// the values >= 8 are used in FANET ground tracking
+enum ground_status_e
+{
+	GROUND_STATUS_INITIAL = 0,
+	GROUND_STATUS_AIRBORNE = 1,
+	GROUND_STATUS_COUNTDOWN = 2,
+	GROUND_STATUS_NEED_RIDE = 8,
+	GROUND_STATUS_LANDED_OK = 9,
+	GROUND_STATUS_NEED_TECH = 12,
+	GROUND_STATUS_NEED_MED = 13,
+	GROUND_STATUS_DISTRESS = 14
+};
+
+enum auto_sos_e
+{
+	AUTO_SOS_OFF    = 0,
+	AUTO_SOS_MANUAL = 1,
+	AUTO_SOS_AUTO   = 2
+};
+
 enum stgidx {
     STG_VERSION,
     STG_MODE,
@@ -257,7 +277,7 @@ enum stgidx {
     STG_EPD_TEAM,
 //#endif
     STG_CALLSIGN,
-    STG_FANET_SOS,
+    STG_AUTO_SOS,
     STG_DEBUG_FLAGS,
     STG_END
 };
@@ -365,7 +385,7 @@ typedef struct Settings {
     uint8_t  logflight;
     uint8_t  loginterval;
     uint8_t  compflash;
-    char     igc_pilot[32];
+    char     igc_pilot[CALLSIGN_LEN-1];
     char     igc_type[20];
     char     igc_reg[12];
     char     igc_cs[8];
@@ -385,14 +405,16 @@ typedef struct Settings {
     uint8_t  antighost;
     uint32_t team;
 //#endif
-    char     callsign[33];
-    uint8_t  fanet_sos;
+    char     callsign[CALLSIGN_LEN];
+    uint8_t  auto_sos;
 
 } settings_t;
 
 // bitfields
 
-#define NMEA_BASIC 1
+#define NMEA_BASIC   1
+#define NMEA_ALL     0x00FF
+#define NMEA_OTHER   0xFFFF
 
 #define NMEA_G 0x000
 #define NMEA_G_BASIC (NMEA_G + 1)
@@ -404,26 +426,31 @@ typedef struct Settings {
 //#define NMEA_G_40  (NMEA_G + 0x40)
 #define NMEA_G_OTHER (NMEA_G + 0x80)
 #define NMEA_G_NONBASIC (NMEA_G + 0xFE)
-#define NMEA_G_ALL   (NMEA_G + 0xFF)
+#define NMEA_G_ALL   (NMEA_G + NMEA_ALL)
 
 #define NMEA_T 0x100
-#define NMEA_T_BASIC (NMEA_T + 1)
-#define NMEA_T_PROJ  (NMEA_T + 8)
+#define NMEA_T_PFLAA (NMEA_T + 1)
+#define NMEA_T_PFLAJ (NMEA_T + 2)
+#define NMEA_T_PFLAM (NMEA_T + 4)
+#define NMEA_T_FNNGB (NMEA_T + 8)
+#define NMEA_T_FNF   (NMEA_T + 16)
+#define NMEA_T_ALL   (NMEA_T + NMEA_ALL)
 
 #define NMEA_S 0x200
 #define NMEA_S_BASIC (NMEA_S + 1)
 #define NMEA_S_LK8   (NMEA_S + 2)
-#define NMEA_S_AHRS  (NMEA_S + 4)
-#define NMEA_S_ALL   (NMEA_S + 0xFF)
+#define NMEA_S_WIND  (NMEA_S + 8)
+#define NMEA_S_AHRS  (NMEA_S + 0x40)
+#define NMEA_S_ALL   (NMEA_S + NMEA_ALL)
 
 #define NMEA_E 0x300
 #define NMEA_E_TUNNEL (NMEA_E + 1)
 #define NMEA_E_OUTPUT (NMEA_E + 2)
-#define NMEA_E_ALL    (NMEA_E + 0xFF)
+#define NMEA_E_ALL    (NMEA_E + NMEA_ALL)
 
 #define NMEA_D 0x400
 #define NMEA_D_BASIC   (NMEA_D + 1)
-#define NMEA_D_ALL     (NMEA_D + 0xFF)
+#define NMEA_D_ALL     (NMEA_D + NMEA_ALL)
 // maybe:
 //#define NMEA_D_RADIO   (NMEA_D + 2)
 //#define NMEA_D_TRAFFIC (NMEA_D + 4)
@@ -478,7 +505,7 @@ extern bool use_eeprom;
 extern uint32_t baudrates[];
 extern bool do_alarm_demo;
 extern bool test_mode;
-extern bool landed_out_mode;
+extern uint8_t ground_status;
 extern int8_t geoid_from_setting;
 
 #endif /* SETTINGS_H */

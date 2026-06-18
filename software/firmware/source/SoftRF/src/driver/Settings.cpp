@@ -26,6 +26,7 @@
 #include "Buzzer.h"
 #include "Bluetooth.h"
 #include "../TrafficHelper.h"
+#include "../Wind.h"
 #include "../protocol/radio/Legacy.h"
 #include "../protocol/data/NMEA.h"
 #include "../protocol/data/GDL90.h"
@@ -39,10 +40,11 @@ settings_t *settings;
 uint8_t settings_used;
 //int settings_file_version = 0;
 
+uint8_t ground_status = GROUND_STATUS_INITIAL;
+
 bool use_eeprom = false;           // set to true if mode & SOFTRF_MODE_EEPROM
 
 bool do_alarm_demo = false;        // activated by middle button on T-Beam
-bool landed_out_mode = false;      // activated by button in status web page
 
 bool test_mode = false;            // activated by double-clicking middle button on T-Beam
                                     // - or via web interface, or via $PSRFT
@@ -79,7 +81,7 @@ struct setting_minmax {
     int8_t min;
     int8_t max;
 };
-#define NUM_MINMAX 8    // may need to manually enlarge this
+#define NUM_MINMAX 7    // may need to manually enlarge this
 setting_minmax stgminmax[NUM_MINMAX];
 
 inline int8_t wifi_only(int8_t stg_type)
@@ -212,7 +214,7 @@ static void init_stgdesc()
   stgdesc[STG_EPD_AGHOST] = { "ghantighost",  (char*)&settings->antighost,  epd_only(STG_UINT1), HIDE_CP };
   stgdesc[STG_EPD_TEAM]   = { "tmteam",       (char*)&settings->team,       epd_only(STG_HEX6), HIDE_CP };
   stgdesc[STG_CALLSIGN]   = { "cscallsign",   (char*)&settings->callsign,   sizeof(settings->callsign), 0 };
-  stgdesc[STG_FANET_SOS]  = { "fsfanet_sos",  (char*)&settings->fanet_sos,  STG_UINT1, 0 };
+  stgdesc[STG_AUTO_SOS]   = { "asauto_sos",  (char*)&settings->auto_sos,    STG_UINT1, 0 };
   stgdesc[STG_DEBUG_FLAGS]= { "dgdebug_flags",(char*)&settings->debug_flags,STG_HEX8, 0 };
 
   // ensure no null labels in the array
@@ -232,7 +234,7 @@ static void init_stgdesc()
 
   stgcomment[STG_MODE]       = "0=Normal ...";
   stgcomment[STG_PROTOCOL]   = "7=Latest 1=OGNTP 2=PAW 5=FANET";
-  stgcomment[STG_ALTPROTOCOL]= "0=none 1=OGNTP 6=Legacy 8=ADSL";
+  stgcomment[STG_ALTPROTOCOL]= "0=none 1=OGNTP 5=FANET 8=ADSL";
   stgcomment[STG_FLR_ADSL]   = "1=FLR+ADSL rx (& some tx)";
   stgcomment[STG_BAND]       = "1=EU 2=US ...";
   stgcomment[STG_ACFT_TYPE]  = "1=GL 2=TOWPL 6=HG 7=PG 0=landed out";
@@ -248,13 +250,13 @@ static void init_stgdesc()
   stgcomment[STG_BAUD_RATE]  = "0=default(38) 2=9600 3=19200 4=38400 ...";
   stgcomment[STG_NMEA_OUT]   = destinations;
   stgcomment[STG_NMEA_G]     = "0=off 1=basic 3=GSA ...";
-  stgcomment[STG_NMEA_T]     = "0=off 1=basic";
+  stgcomment[STG_NMEA_T]     = "0=off 1=PFLAU+PFLAA 4=PFLAM 8=FNNGB";
   stgcomment[STG_NMEA_S]     = "0=off 1=basic 3=LK8EX1";
   stgcomment[STG_NMEA_D]     = yesno;
   stgcomment[STG_NMEA_E]     = "0=off 1=tunnel 2=output 3=both";
   stgcomment[STG_NMEA_OUT2]  = destinations;
   stgcomment[STG_NMEA2_G]    = "0=off 1=basic 3=GSA ...";
-  stgcomment[STG_NMEA2_T]    = "0=off 1=basic";
+  stgcomment[STG_NMEA2_T]    = "0=off 1=PFLAU+PFLAA 4=PFLAM 8=FNNGB";
   stgcomment[STG_NMEA2_S]    = "0=off 1=basic 3=LK8EX1";
   stgcomment[STG_NMEA2_D]    = yesno;
   stgcomment[STG_NMEA2_E]    = "0=off 1=tunnel 2=output 3=both";
@@ -296,8 +298,7 @@ static void init_stgdesc()
   stgcomment[STG_EPD_IDPREF] = "0=reg 1=tail 2=model 3=type, 4=hex";
   stgcomment[STG_EPD_AGHOST] = "0=off 1=auto 2=2min 3=5min";
 #endif
-  //stgcomment[STG_IGC_PILOT] = "also sent as FANET name";
-  stgcomment[STG_FANET_SOS] = "0=off 1=manual 2=auto";
+  stgcomment[STG_AUTO_SOS]   = "0=off 1=manual 2=auto";
 
   stgminmax[0] = { STG_RFC,       -30, 30 };
   stgminmax[1] = { STG_GEOID,    -104, 84 };
@@ -305,8 +306,7 @@ static void init_stgdesc()
   stgminmax[3] = { STG_TXPOWER,     0,  2 };
   stgminmax[4] = { STG_EXPIRE,      1, ENTRY_EXPIRATION_TIME };
   stgminmax[5] = { STG_MODE_S,      0,  9 };
-  stgminmax[6] = { STG_FANET_SOS,   0,  2 };
-  stgminmax[7] = { STG_END,         0,  0 };  // marks the end
+  stgminmax[6] = { STG_END,         0,  0 };  // marks the end
 }
 
 bool hidden_setting(uint8_t index)
@@ -664,6 +664,22 @@ void Adjust_Settings()
     strncpy(settings->callsign, settings->igc_reg, sizeof(settings->callsign));
   if (settings->callsign[0]=='\0' && settings->igc_type[0]!='\0')
     strncpy(settings->callsign, settings->igc_type, sizeof(settings->callsign));
+
+  if (settings->stealth || settings->no_track
+    || settings->id_method==ADDR_TYPE_RANDOM || settings->id_method==ADDR_TYPE_ANONYMOUS) {
+      // do not send or receive text info if hiding
+      settings->nmea_t  &= ~NMEA_T_PFLAM;
+      settings->nmea2_t &= ~NMEA_T_PFLAM;
+  }
+  if (settings->nmea_out == DEST_UART || settings->nmea_out == DEST_USB) {
+      if (settings->baud_rate != BAUD_DEFAULT && settings->baud_rate < BAUD_38400)
+          settings->nmea_t  &= ~NMEA_T_PFLAM;
+  }
+  if (settings->nmea_out2 == DEST_UART || settings->nmea_out2 == DEST_USB) {
+      if (settings->baud_rate != BAUD_DEFAULT && settings->baud_rate < BAUD_38400)
+          settings->nmea2_t &= ~NMEA_T_PFLAM;
+  }
+
 }
 
 const char *settings_message(const char *newmsg, const char *submsg, const int val)
@@ -717,11 +733,14 @@ void Settings_defaults()
 
     settings->mode        = SOFTRF_MODE_NORMAL;
 
-    if (hw_info.model == SOFTRF_MODEL_BRACELET)  // >>> T1000E, M3, maybe T-Echo?
+    if (hw_info.model == SOFTRF_MODEL_CARD
+    ||  hw_info.model == SOFTRF_MODEL_POCKET
+    ||  hw_info.model == SOFTRF_MODEL_BADGE
+    ||  hw_info.model == SOFTRF_MODEL_HANDHELD)
     {
         settings->acft_type   = AIRCRAFT_TYPE_PARAGLIDER;
         settings->rf_protocol = RF_PROTOCOL_FANET;
-        //settings->id_method   = ADDR_TYPE_FANET;
+        //settings->id_method = ADDR_TYPE_FANET;
         settings->id_method   = ADDR_TYPE_FLARM;
     } else {
         settings->acft_type   = AIRCRAFT_TYPE_GLIDER;
@@ -757,14 +776,16 @@ void Settings_defaults()
 
     settings->nmea_g  = NMEA_BASIC;
     settings->nmea_p  = 0;
-    settings->nmea_t  = NMEA_BASIC;
+    settings->nmea_t  = (settings->rf_protocol==RF_PROTOCOL_FANET? NMEA_T_FNNGB : NMEA_T_PFLAA);
+    settings->nmea_t  |= NMEA_T_PFLAM;
     settings->nmea_s  = NMEA_BASIC;
     settings->nmea_d  = 0;
     settings->nmea_e  = 0;
 
     settings->nmea2_g = NMEA_BASIC;
     settings->nmea2_p = 0;
-    settings->nmea2_t = NMEA_BASIC;
+    settings->nmea2_t = (settings->rf_protocol==RF_PROTOCOL_FANET? NMEA_T_FNNGB : NMEA_T_PFLAA);
+    settings->nmea2_t |= NMEA_T_PFLAM;
     settings->nmea2_s = NMEA_BASIC;
     settings->nmea2_d = 0;
     settings->nmea2_e = 0;
@@ -862,7 +883,7 @@ void Settings_defaults()
     settings->antighost   = ANTI_GHOSTING_AUTO;
     settings->team        = 0;
 //#endif
-    settings->fanet_sos   = 0;
+    settings->auto_sos   = AUTO_SOS_OFF;
 
     settings->version = 0;        // SOFTRF_SETTINGS_VERSION will come from file
     settings->altprotocol = RF_PROTOCOL_NONE;
@@ -961,7 +982,8 @@ bool format_setting(const int i, const bool comment, bool shorthand, char *buf, 
 
 void show_settings_serial()
 {
-  Serial.printf("Settings loaded from %s:\r\n",
+  Serial.printf("SoftRF version: %s, settings loaded from %s:\r\n",
+      SOFTRF_FIRMWARE_VERSION,
       settings_used==STG_FILE? "file" : settings_used==STG_EEPROM? "EEPROM" : "defaults");
 
   for (int i=STG_MODE; i<STG_END; i++) {
