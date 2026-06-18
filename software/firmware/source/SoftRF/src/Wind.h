@@ -24,6 +24,8 @@ extern float wind_best_ew;
 extern float wind_speed;
 extern float wind_direction;
 
+extern uint32_t Landed_time;
+
 void this_airborne(bool validfix);
 void project_this(container_t *);
 void project_that(container_t *);

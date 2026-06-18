@@ -18,6 +18,10 @@
 
 #include <math.h>
 
+#if defined(ESP32)
+#include <toneAC.h>
+#endif
+
 #include "system/SoC.h"
 #include "TrafficHelper.h"
 #include "Wind.h"
@@ -34,7 +38,7 @@ float wind_best_ns = 0.0;  /* mps */
 float wind_best_ew = 0.0;
 float wind_speed = 0.0;
 float wind_direction = 0.0;
-// uint32_t AirborneTime = 0;
+uint32_t Landed_time = 0;
 
 static float avg_abs_turnrate = 0.0;  /* absolute - average when circling */
 static float avg_speed = 0.0;     /* average around the circle */
@@ -43,6 +47,7 @@ static float avg_climbrate = 0.0; /* fpm, based on GNSS data */
 void Estimate_Wind()
 {
   static uint32_t old_gnsstime = 0;
+  static uint32_t pswsd_time = 0;
   static float old_lat = 0.0;     /* where a circle started, on its Northern edge */
   static float old_lon = 0.0;     /* where a circle started, on its Eastern edge */
   static uint32_t start_time = 0;
@@ -76,7 +81,7 @@ void Estimate_Wind()
   uint32_t gnsstime_ms = ThisAircraft.gnsstime_ms;
 
   /* ignore repeats of same GPS reading */
-  if (gnsstime_ms < old_gnsstime + 600)
+  if (gnsstime_ms < old_gnsstime + 800)
     return;
 
   // this function is called every 666 ms
@@ -90,6 +95,23 @@ void Estimate_Wind()
      avg_abs_turnrate = 0.0;
      //avg_speed = 0.0;
      return;
+  }
+
+  // every 123 seconds report the wind
+  if (millis() > pswsd_time + 123000) {
+      pswsd_time = millis();
+      snprintf_P(NMEABuffer, sizeof(NMEABuffer),
+        PSTR("$PSWSD,%.1f,%.0f\r\n"),
+        wind_speed * (1.0 / _GPS_MPS_PER_KNOT), wind_direction);
+      NMEAOutC(NMEA_S_WIND);
+#if defined(ESP32)
+#if defined(USE_SD_CARD)
+      if (SD_is_mounted
+      &&   ((settings->nmea_s & NMEA_S_WIND) || (settings->nmea2_s & NMEA_S_WIND))) {
+        FlightLogComment(NMEABuffer+3);
+      }
+#endif
+#endif
   }
 
   old_gnsstime = gnsstime_ms;
@@ -482,20 +504,6 @@ FlightLogComment(NMEABuffer);
       }
 #endif
 #endif
-      snprintf_P(NMEABuffer, sizeof(NMEABuffer),
-        PSTR("$PSWSD,%.1f,%.0f\r\n"),
-        wind_speed * (1.0 / _GPS_MPS_PER_KNOT), wind_direction);
-      NMEAOutD();
-#if defined(ESP32)
-#if defined(USE_SD_CARD)
-      if (SD_is_mounted) {
-        snprintf_P(NMEABuffer, sizeof(NMEABuffer),
-          PSTR("WSD,%.1f,%.0f\r\n"),
-          wind_speed * (1.0 / _GPS_MPS_PER_KNOT), wind_direction);
-        FlightLogComment(NMEABuffer);
-      }
-#endif
-#endif
     }
   }
 
@@ -512,7 +520,6 @@ FlightLogComment(NMEABuffer);
             weight_ew *= 0.625;
     }
   }
-
 }
 
 
@@ -562,7 +569,18 @@ void this_airborne(bool validfix)
 
     } else if (airborne <= 0) {    /* not airborne but moving with speed > 1 knot */
 
-        if ( speed > 20.0                                               /* 20 knots  */
+        static float speed_low = 0.0;
+        if (speed_low == 0.0) {
+            if (settings->acft_type == AIRCRAFT_TYPE_PARAGLIDER
+             || settings->acft_type == AIRCRAFT_TYPE_HANGGLIDER
+             || settings->acft_type == AIRCRAFT_TYPE_BALLOON) {
+                speed_low  = 5.0;   /* ~9 km/h - above walking pace */
+            } else {
+                speed_low  = 20.0;  /* ~37 km/h */
+            }
+        }
+
+        if ( speed > speed_low                                               /* 20 knots  */
           || fabs(ThisAircraft.latitude - initial_latitude) > 0.0018f   /* about 200 meters */
           || fabs(ThisAircraft.longitude - initial_longitude) > 0.0027f
           || fabs(ThisAircraft.altitude - initial_altitude) > 120.0f) {
@@ -593,21 +611,39 @@ void this_airborne(bool validfix)
     bool airborne_changed = false;
     if (ThisAircraft.airborne==0 && airborne>0) {
       airborne_changed = true;
-      // AirborneTime = RF_time;
+      Landed_time = 0;  // even if landed and took off again
+      ground_status == GROUND_STATUS_AIRBORNE;
 //#if defined(ESP32)
-      startlogs();      // restart alarm log (and flight log) on first takeoff after boot
+      startlogs();      // restart flight log (and alarm log) on takeoff
 //#endif
     } else if (ThisAircraft.airborne==1 && airborne<=0) {
       airborne_changed = true;
-      // AirborneTime = 0;
+      Landed_time = millis();
+      if (settings->auto_sos == AUTO_SOS_AUTO)
+          ground_status == GROUND_STATUS_COUNTDOWN;
     }
+
+    //if (settings->rf_protocol==RF_PROTOCOL_FANET || settings->altprotocol==RF_PROTOCOL_FANET) {
+        if (ground_status == GROUND_STATUS_COUNTDOWN) {
+            if (settings->auto_sos == AUTO_SOS_AUTO) {
+                toneAC(1300, 10, 50, 1);     // one short beep every 666 ms
+                if (millis() > Landed_time + 180000)
+                    ground_status = GROUND_STATUS_DISTRESS;
+            } else {
+                if (millis() > Landed_time + 180000)
+                    ground_status = GROUND_STATUS_LANDED_OK;
+            }
+        } else if (ground_status >= GROUND_STATUS_NEED_MED) {
+            toneAC(1900, 10, 50, 0);
+            delay(50);
+            toneAC(1900, 10, 50, 1);     // double-beep
+        }
+    //}
 
     ThisAircraft.airborne = (airborne > 0)? 1 : 0;
 
-    if (airborne_changed) {
-      if (settings->nmea_t || settings->nmea2_t)
-        sendPFLAJ();
-    }
+    if (airborne_changed)
+        NMEA_PFLAJ();
 
     if (airborne != was_airborne) {
       if ((settings->nmea_d || settings->nmea2_d) && (settings->debug_flags & DEBUG_PROJECTION)) {
@@ -704,7 +740,7 @@ void report_this_projection(container_t *this_aircraft, int proj_type)
       //if ((this_aircraft->circling && (counter & 0x01) == 0) || (counter & 0x07) == 0) {
       if (SD_is_mounted && (counter & 0x01) == 0) {
           // about every 5 (or 20) seconds
-          FlightLogComment(NMEABuffer+3);  // LPLTPTA,...
+          FlightLogComment(NMEABuffer+3);  // LSRFPTA,...
       }
 #endif
 #endif
@@ -733,7 +769,7 @@ void report_that_projection(container_t *fop, int proj_type)
       ++counter;
       if (SD_is_mounted && (counter & 0x07) == (fop->addr & 0x07)) {
           // about every 20 seconds for each other aircraft
-          FlightLogComment(NMEABuffer+3);  // LPLTPOA,...
+          FlightLogComment(NMEABuffer+3);  // LSRFPOA,...
       }
 #endif
 #endif
