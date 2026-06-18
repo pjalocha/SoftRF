@@ -138,6 +138,9 @@ uint8_t adsb_acfts;
 bool alarm_ahead = false;                    /* global, used for visual displays */
 bool relay_next = false;
 bool alt_relay_next = false;
+static uint32_t towing = 0;
+static uint32_t tow_addr = 0;
+static bool tow_logged = false;
 
 float average_baro_alt_diff = 0;
 
@@ -147,6 +150,27 @@ static uint32_t Alarm_timer = 0;
 
 container_t *relay_waiting = NULL;
 uint32_t priority_relay = 0;   // ID of landed-out or close ADS-B
+
+// this is used in NMEA.cpp and EPD.cpp:
+const char *Aircraft_Type[] = {
+  [AIRCRAFT_TYPE_UNKNOWN]    = "Unkwn",
+  [AIRCRAFT_TYPE_GLIDER]     = "Glider",
+  [AIRCRAFT_TYPE_TOWPLANE]   = "Towpln",
+  [AIRCRAFT_TYPE_HELICOPTER] = "Helicp",
+  [AIRCRAFT_TYPE_PARACHUTE]  = "Parach",
+  [AIRCRAFT_TYPE_DROPPLANE]  = "Dropln",
+  [AIRCRAFT_TYPE_HANGGLIDER] = "Hanggl",
+  [AIRCRAFT_TYPE_PARAGLIDER] = "Paragl",
+  [AIRCRAFT_TYPE_POWERED]    = "Powerd",
+  [AIRCRAFT_TYPE_JET]        = "Jet",
+  [AIRCRAFT_TYPE_UFO]        = "UFO",
+  [AIRCRAFT_TYPE_BALLOON]    = "Blloon",
+  [AIRCRAFT_TYPE_ZEPPELIN]   = "Zeppel",
+  [AIRCRAFT_TYPE_UAV]        = "UAV",
+  [AIRCRAFT_TYPE_RESERVED]   = "Reserv",
+  [AIRCRAFT_TYPE_STATIC]     = "Static",
+  [AIRCRAFT_TYPE_WINCH]      = "Winch"
+};
 
 // Compute registration-number from ICAO ID - USA and Canada only
 
@@ -300,6 +324,37 @@ static int8_t Alarm_Distance(container_t *this_aircraft, container_t *fop)
     return ALARM_LEVEL_NONE;
   }
 
+#if 0
+  // flag if possibly a tow operation - avoid alarms on tow
+  bool tow = (ThisAircraft.aircraft_type==AIRCRAFT_TYPE_TOWPLANE && fop->aircraft_type==AIRCRAFT_TYPE_GLIDER)
+        || (ThisAircraft.aircraft_type==AIRCRAFT_TYPE_GLIDER && fop->aircraft_type==AIRCRAFT_TYPE_TOWPLANE);
+  if (tow && (fop->tx_type > TX_TYPE_S)) {
+    float course_diff = fabs(ThisAircraft.course - fop->course);
+    if ((fop->distance > 130.0f)                              // meters
+    ||  (fabs(ThisAircraft.speed - fop->speed) > 10.0f)       // knots
+    ||  (course_diff > 20.0f && course_diff < 340.0f)         // degrees
+    ||  (fabs(ThisAircraft.turnrate - fop->turnrate) > 6.0f)  // deg/sec
+    ||  (fabs(fop->alt_diff) > 80.0f))                        // meters
+             tow = false;
+  }
+  if (tow) {
+    tow_addr = fop->addr;
+    towing = OurTime;       // expired in Traffic_loop()
+/*
+    if ((settings->nmea_d || settings->nmea2_d) && (settings->debug_flags & DEBUG_ALARM)) {
+      snprintf_P(NMEABuffer, sizeof(NMEABuffer),
+        PSTR("$PSALD,%06X,%ld,9,%.1f,%.1f,%.1f,0,%.5f,%.5f,%.1f,%.1f,%.1f,%.5f,%.5f,%.1f,%.1f,%.1f\r\n"),
+        fop->addr, fop->gnsstime_ms, V_rel_magnitude, V_rel_direction, fop->bearing,
+        this_aircraft->latitude, this_aircraft->longitude, this_aircraft->altitude,
+           this_aircraft->speed, this_aircraft->course,
+        fop->latitude, fop->longitude, fop->altitude, fop->speed, fop->course);
+      NMEAOutD();
+    }
+*/
+    return ALARM_LEVEL_NONE;
+  }
+#endif
+
   float adj_distance;
   if (fop->adj_distance > distance)
          adj_distance = fop->adj_distance;
@@ -334,8 +389,6 @@ static int8_t Alarm_Vector(container_t *this_aircraft, container_t *fop)
   if (fop->speed == 0)
     return Alarm_Distance(this_aircraft, fop);    // ADS-B target with no velocity message yet
 
-  int8_t rval = ALARM_LEVEL_NONE;
-
   if (fop->gnsstime_ms - fop->prevtime_ms > 3000)   /* also catches prevtime_ms == 0 */
     return Alarm_Distance(this_aircraft, fop);
 
@@ -362,6 +415,8 @@ static int8_t Alarm_Vector(container_t *this_aircraft, container_t *fop)
 
   float V_rel_magnitude, V_rel_direction, t;
 
+  int8_t rval = ALARM_LEVEL_NONE;
+
   if (abs_alt_diff < VERTICAL_SEPARATION) {  /* no alarms if too high or too low */
 
     float adj_distance = fop->adj_distance;
@@ -384,6 +439,7 @@ static int8_t Alarm_Vector(container_t *this_aircraft, container_t *fop)
     /* +- some degrees tolerance for collision course */
     /* also check the relative speed, ALARM_VECTOR_SPEED = 2 m/s */
     /* also adj_distance takes altitude difference into account */
+
 
     if (V_rel_magnitude > ALARM_VECTOR_SPEED) {
 
@@ -533,17 +589,6 @@ static int8_t Alarm_Latest(container_t *this_aircraft, container_t *fop)
 
   // flag if both aircraft are circling in the same direction
   bool gaggling = (abs(this_aircraft->circling + fop->circling) == 2);
-
-  // flag if possibly a tow operation
-  bool towing = (this_aircraft->aircraft_type==AIRCRAFT_TYPE_TOWPLANE && fop->aircraft_type==AIRCRAFT_TYPE_GLIDER)
-             || (this_aircraft->aircraft_type==AIRCRAFT_TYPE_GLIDER && fop->aircraft_type==AIRCRAFT_TYPE_TOWPLANE);
-  if (towing) {
-    float course_diff = fabs(this_aircraft->course - fop->course);
-    if (course_diff > 20.0 && course_diff < 340.0)            towing = false;
-    if (fabs(this_aircraft->turnrate - fop->turnrate) > 6.0)  towing = false;   // deg/sec
-    if (fabs(this_aircraft->speed - fop->speed) > 15.0)       towing = false;   // knots
-  }
-  // actually diverted typical towing (both non-turning) to vector method above
 
   /* Use integer math for computational speed */
 
@@ -734,7 +779,7 @@ static int8_t Alarm_Latest(container_t *this_aircraft, container_t *fop)
       } else {  /* min-dist time is at most 18 seconds */
         rval = ALARM_LEVEL_LOW;
       }
-  } else if (minsqdist < 70*70*4*4 && !gaggling && !towing ) {
+  } else if (minsqdist < 70*70*4*4 && !gaggling /* && !towing */) {
       if (mintime < ALARM_TIME_EXTREME) {
         rval = ALARM_LEVEL_URGENT;
       } else if (mintime < ALARM_TIME_URGENT) {
@@ -744,7 +789,7 @@ static int8_t Alarm_Latest(container_t *this_aircraft, container_t *fop)
       } else {
         rval = ALARM_LEVEL_CLOSE;
       }
-  } else if (minsqdist < 120*120*4*4 && !gaggling && !towing ) {
+  } else if (minsqdist < 120*120*4*4 && !gaggling /* && !towing */) {
       if (mintime < ALARM_TIME_EXTREME) {
         rval = ALARM_LEVEL_IMPORTANT;
       } else if (mintime < ALARM_TIME_URGENT) {
@@ -787,7 +832,7 @@ static int8_t Alarm_Latest(container_t *this_aircraft, container_t *fop)
   return rval;
 }
 
-void logOneTraffic(container_t *fop, const char *label)
+void logOneTraffic(container_t *fop, const char *label, bool force)
 {
 //#if defined(USE_SD_CARD)
     uint32_t addr = ((fop->no_track && fop->tx_type==TX_TYPE_FLARM)? 0xAAAAAA : fop->addr);
@@ -804,7 +849,7 @@ void logOneTraffic(container_t *fop, const char *label)
       (int)(wind_speed * (1.0 / _GPS_MPS_PER_KNOT)), (int)wind_direction);
     //Serial.print(NMEABuffer);
     NMEAOutD();
-    FlightLogComment(NMEABuffer+4);   // it will prepend the LPLT
+    FlightLogComment(NMEABuffer+4, force);   // it will prepend the LSRF
 //#endif
 }
 
@@ -812,7 +857,7 @@ void logrelayed(container_t *cip)
 {
     uint32_t addr = ((cip->no_track && cip->tx_type==TX_TYPE_FLARM)? 0xAAAAAA : cip->addr);
     snprintf_P(NMEABuffer, sizeof(NMEABuffer),
-      PSTR("LPLTR,%d,%d,%d,%06x,%d,%d,%d,%d\r\n"),
+      PSTR("LSRFR,%d,%d,%d,%06x,%d,%d,%d,%d\r\n"),
       cip->tx_type, cip->protocol, cip->aircraft_type, addr,
       (int)cip->distance, (int)cip->bearing, (int)cip->alt_diff, cip->rssi);
     if (settings->debug_flags & DEBUG_RELAY)
@@ -820,7 +865,7 @@ void logrelayed(container_t *cip)
     else
         Serial.print(NMEABuffer);
     if (FlightLogOpen && settings->logflight == FLIGHT_LOG_TRAFFIC)
-        FlightLogComment(NMEABuffer+4);   // it will prepend the LPLT
+        FlightLogComment(NMEABuffer+4);   // it will prepend the LSRF
 }
 
 // insert data about all "close" traffic into the flight log
@@ -843,7 +888,13 @@ void logCloseTraffic()
             continue;
         if (OurTime > fop->timestamp + 3 /*seconds*/ )
             continue;
-        logOneTraffic(fop, "LPLTT");
+        // no need to log the towplane repeatedly
+        if (towing && fop->addr == tow_addr) {
+            if (tow_logged)
+                continue;
+            tow_logged = true;
+        }
+        logOneTraffic(fop, "LSRFT", false);
     }
 //#endif
 }
@@ -977,6 +1028,27 @@ void Traffic_Update(container_t *fop)
         return;
   }
 
+#if 1
+  // flag if possibly a tow operation - avoid alarms on tow
+  bool tow = (ThisAircraft.aircraft_type==AIRCRAFT_TYPE_TOWPLANE && fop->aircraft_type==AIRCRAFT_TYPE_GLIDER)
+        || (ThisAircraft.aircraft_type==AIRCRAFT_TYPE_GLIDER && fop->aircraft_type==AIRCRAFT_TYPE_TOWPLANE);
+  if (tow && (fop->tx_type > TX_TYPE_S)) {
+    float course_diff = fabs(ThisAircraft.course - fop->course);
+    if ((fop->distance > 130.0f)                              // meters
+    ||  (fabs(ThisAircraft.speed - fop->speed) > 10.0f)       // knots
+    ||  (course_diff > 20.0f && course_diff < 340.0f)         // degrees
+    ||  (fabs(ThisAircraft.turnrate - fop->turnrate) > 6.0f)  // deg/sec
+    ||  (fabs(fop->alt_diff) > 80.0f))                        // meters
+             tow = false;
+  }
+  if (tow) {
+      tow_addr = fop->addr;
+      towing = OurTime;       // expired in Traffic_loop() 
+      fop->alarm_level = ALARM_LEVEL_NONE;
+      return;
+  }
+#endif
+
   if (Alarm_Level) {  // if a collision prediction algorithm selected
 
       uint8_t old_alarm_level = fop->alarm_level;
@@ -1003,7 +1075,7 @@ void Traffic_Update(container_t *fop)
 // - allow logalarms even on FATFS
       if (fop->alarm_level > old_alarm_level && FlightLogOpen) {
           if (settings->logalarms || settings->logflight == FLIGHT_LOG_TRAFFIC)
-            logOneTraffic(fop, "LPLTA");  // do not wait until logFlightPosition()
+            logOneTraffic(fop, "LSRFA", true);  // do not wait until logFlightPosition()
       }
 //#endif
   }
@@ -1157,8 +1229,8 @@ void save_range_stats()
             newrange[oclock],
             newrange_n[oclock]);
         Serial.println(buf+3);
-        statsfile.println(buf+3);   // skip the "AN,"
-        FlightLogComment(buf);      // - it will prepend LPLT, resulting in, e.g., LPLTAN,...
+        statsfile.println(buf+3);     // skip the "AN,"
+        FlightLogComment(buf, true);  // - it will prepend LSRF, resulting in, e.g., LSRFAN,...
     }
     newrssi_sum += oldrssi_mean * (float) oldrssi_n;   // total new sum
     newrssi_n   += oldrssi_n;                // total count
@@ -1174,10 +1246,10 @@ void save_range_stats()
     //}
     snprintf(buf, 64, "AN,%f,%f", newrssi_sum, newrssi_ssd);
     Serial.println(buf+3);
-    statsfile.println(buf+3);   // skip the "AN,"
-    FlightLogComment(buf);      // - it will prepend LPLT, resulting in, e.g., LPLTAN,...
+    statsfile.println(buf+3);      // skip the "AN,"
+    FlightLogComment(buf, true);   // - it will prepend LSRF, resulting in, e.g., LSRFAN,...
     statsfile.close();
-    load_range_stats();         // in case of another flight
+    load_range_stats();            // in case of another flight
 }
 
 /* relay landed-out or ADS-B traffic if we are airborne */
@@ -1331,7 +1403,7 @@ Serial.println("...relay_waiting");
               PSTR("$PSRLY,%02d:%02d,%06x,%s\r\n"),
               gnss.time.hour(), gnss.time.minute(), cip->addr, cip->callsign);
             NMEAOutC(NMEA_T);
-            FlightLogComment(NMEABuffer+3);    // will appear as LPLTRLY
+            FlightLogComment(NMEABuffer+3);    // will appear as LSRFRLY
         }
     }
 
@@ -1420,7 +1492,9 @@ void CopyTraffic(container_t *cip, ufo_t *fop, const char *callsign)
     cip->vs = fop->vs;
     cip->hdop = fop->hdop;
     cip->last_crc = fop->last_crc;
-    cip->protocol = fop->protocol;
+    // in case same aircraft transmits in both PAW & ADSL, label it as PAW:
+    if (cip->protocol != RF_PROTOCOL_PAW)
+        cip->protocol = fop->protocol;
     cip->tx_type = fop->tx_type;
     cip->addr_type = fop->addr_type;
     cip->aircraft_type = fop->aircraft_type;
@@ -1451,7 +1525,7 @@ void report_landed_out(ufo_t *fop)
        PSTR("$PSRLO,%02d:%02d,%06x,%.5f,%.5f\r\n"),
        gnss.time.hour(), gnss.time.minute(), fop->addr, fop->latitude, fop->longitude);
     NMEAOutC(NMEA_T);
-    FlightLogComment(NMEABuffer+4);    // will appear as LPLTLO
+    FlightLogComment(NMEABuffer+4, true);    // will appear as LSRFLO
     // also output to alarmlog
     if (AlarmLogOpen)
         AlarmLog.print((const char *) NMEABuffer);
@@ -1662,8 +1736,7 @@ void ParseData(void)
     rx_size = rx_size > sizeof(fo_raw) ? sizeof(fo_raw) : rx_size;
 
     if (memcmp(RxBuffer, TxBuffer, rx_size) == 0) {
-Serial.print("RF loopback is detected, rx_try=");     // seen on the sx1262?
-Serial.println(which_rx_try);
+Serial.println("RF loopback is detected");     // seen on the sx1262?
       if (settings->nmea_p) {
         StdOut.println(F("$PSRFE,RF loopback is detected"));
       }
@@ -1675,7 +1748,7 @@ Serial.println(which_rx_try);
     if (settings->nmea_p) {
       StdOut.print(F("$PSRFI,"));
       StdOut.print((unsigned long) now()); StdOut.print(F(","));
-      StdOut.print(Bin2Hex(fo_raw, rx_size)); StdOut.print(F(","));
+      StdOut.print(bytes2Hex(fo_raw, rx_size)); StdOut.print(F(","));
       StdOut.println(RF_last_rssi);
     }
 
@@ -1738,6 +1811,12 @@ void Traffic_loop()
 
     if (! isTimeToUpdateTraffic())
         return;
+
+    if (towing && (OurTime - towing > 10 /*seconds*/)) {
+        towing = 0;
+        tow_addr = 0;
+        tow_logged = false;
+    }
 
     container_t *mfop = NULL;
     max_alarm_level = ALARM_LEVEL_NONE;          /* global, used for visual displays */

@@ -117,6 +117,8 @@ extern float average_baro_alt_diff;
 extern uint8_t adsb_acfts;
 extern int8_t maxrssi;
 
+extern const char *Aircraft_Type[];
+
 //#if defined(ESP32)
 extern File AlarmLog;
 extern bool AlarmLogOpen;
