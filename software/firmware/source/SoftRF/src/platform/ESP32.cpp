@@ -73,6 +73,7 @@ bool SPIFFS_is_mounted = false;
 #include "../protocol/data/IGC.h"
 #include "../protocol/data/GDL90.h"
 #include "../protocol/data/D1090.h"
+//#include "../protocol/radio/FANET.h"
 
 #if defined(USE_TFT)
 #include <TFT_eSPI.h>
@@ -3047,13 +3048,20 @@ void handleEvent2(AceButton* button, uint8_t eventType,
           settings->mode = SOFTRF_MODE_NORMAL;
           OLED_msg("NORMAL", "MODE");
           Serial.println("normal mode");
-      } else if (landed_out_mode) {
-          landed_out_mode = false;
+      } else if (ground_status == GROUND_STATUS_NEED_RIDE || ground_status > GROUND_STATUS_LANDED_OK) {
+          ground_status == GROUND_STATUS_LANDED_OK;
           OLED_msg("NORMAL", "MODE");
           Serial.println("landed_out_mode off");
       } else {
-          landed_out_mode = true;
-          OLED_msg("LANDED", "OUT");
+          if (settings->auto_sos == AUTO_SOS_OFF)
+              ground_status = GROUND_STATUS_NEED_RIDE;
+          else
+              ground_status = GROUND_STATUS_DISTRESS;
+          fanet_sos_count = 0;   // send several SOS messages (again)
+          if (ground_status == GROUND_STATUS_DISTRESS)
+              OLED_msg("DISTRESS", "MODE");
+          else
+              OLED_msg("LANDED", "OUT");
           Serial.println("landed_out_mode on");
       }
 #else

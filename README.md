@@ -9,6 +9,7 @@ DIY, multifunctional, compatible, sub-1 GHz ISM band radio based proximity aware
 
 ### Latest major additions:
 
+* vMB203: now supports messaging (PFLAM)
 * vMB202: using RadioLib, now supports the Sensecap T1000-E and Thinknode M3 (& M1)
 * vMB179: added FANET id_method, auto-region by default, buzz at first GNSS fix
 * vMB174: dual-protocol FANET (or P3I) plus FLARM (or ADS-L) modes

@@ -101,7 +101,7 @@ Compress:  "-----xx----xxx------xxx-----xx---xx\r\n"   (12 digits in 6 bytes, no
 Decompression algorithm:  Read first byte of each line to classify it:
 * If 0x0A, read the rest of the line verbatim (for header lines and G-records)
       - end of variable-length lines is signaled by \n, translate to \r\n
-* If 0x0C, translate to "LPLT" and read the rest of the line verbatim
+* If 0x0C, translate to "LSRF" and read the rest of the line verbatim
       - end of variable-length lines is signaled by \n, translate to \r\n
 * Else bitwise-and the byte with 0xE0, and:
 * If 0xA0, increment B-record template byte at index=(byte & 0x1F)
@@ -186,7 +186,7 @@ bool decompressfile(char *filename)
             if (c == 0x0A) {
                 state = 0xAA;
             } else if (c == 0x0C) {
-                strcpy(p,"LPLT");
+                strcpy(p,"LSRF");
                 p += 4;
                 state = 0xAA;
             } else {
@@ -533,9 +533,9 @@ void compressblock(size_t insize)
                     outbuf[outsize++] = ((c1-'0') | ((c2-'0')<<4));
                 }
                 p = q + 37;    // past the \r\n
-            } else if (c == 'L') {    // LPLT comment lines
+            } else if (c == 'L') {    // comment lines
                 outbuf[outsize++] = 0x0C;
-                p += 3;    // past the "LPLT"
+                p += 3;    // past the "LSRF"
                 compress = false;
             } else {   // neither B nor L - it is A, H, I, G, etc
                 outbuf[outsize++] = 0x0A;
@@ -680,7 +680,7 @@ void igc_file_append_nonconst(char *data, bool keepcommas=false, bool iscomment=
     if (size == 0)
         return;   // should not happen
     igc_file_append(data, size+2);     // include \r\n
-    // it appears that the LK8000 validator does include LPLT lines in the MD5 calc
+    // it appears that the LK8000 validator does include comment lines in the MD5 calc
     //if (iscomment)
     //    return;                       // skip MD5 calc
     if (keepcommas) {
@@ -709,7 +709,6 @@ void igc_file_append_commas(char *data)
 }
 
 // this checks and corrects the chars, they cannot be const
-// this excludes the (LPLT) comment from the MD5 calculation
 void igc_file_append_comment(char *data)
 {
     igc_file_append_nonconst(data, true, true);
@@ -1204,14 +1203,16 @@ void logFlightPosition()
 }
 
 // must be given a null-terminated string
-void FlightLogComment(const char *data)
+void FlightLogComment(const char *data, bool force)
 {
     if (FlightLogFail)
         return;
     if (! FlightLogOpen)
         return;
+    if (! force && compfileOpen)
+        return;            // no comments in compressed file
     char buf[80];
-    strcpy(buf, "LPLT");
+    strcpy(buf, "LSRF");
     size_t len = strlen(data);
     if (len > 72)  len = 72;   // IGC format limits lines to 76 chars
     strncpy(buf+4, data, len);

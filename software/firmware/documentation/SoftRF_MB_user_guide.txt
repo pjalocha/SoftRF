@@ -3,7 +3,7 @@ Basic Documentation for Moshe Braner's version of SoftRF
 
 By Moshe Braner
 
-This version last updated May 15, 2026 to fit software version MB202
+This version last updated June 14, 2026 to fit software version MB203
 The latest version of this document is always here:
   https://github.com/moshe-braner/SoftRF/blob/master/software/firmware/documentation
 or direct link:
@@ -30,7 +30,7 @@ Some people call this an "OGN tracker", although that label should be reserved f
 
 What can SoftRF do that FLARM cannot?
 
-On appropriate hardware, SoftRF can send traffic (and position) data out via WiFi or Bluetooth, which older FLARM models cannot do without additional hardware.  (The new "Fusion" versions of FLARM do have wireless connectivity.)  SoftRF can also operate using radio communications protocols other than the one used by FLARM, such as OGNTP, ADS-L, P3I or FANET.  But for the vast majority of glider pilots the FLARM protocol is the important one, as it simultaneously offers both bidirectional air-to-air traffic awareness for collision avoidance and the option to be tracked by OGN ground stations.  SoftRF can run all day on a small internal battery.
+On appropriate hardware, SoftRF can send traffic (and position) data out via WiFi or Bluetooth, which older FLARM models cannot do without additional hardware.  (The new "Fusion" versions of FLARM do have wireless connectivity.)  SoftRF can also operate using radio communications protocols other than the one used by FLARM, such as OGNTP, ADS-L, PilotAware or FANET.  But for the vast majority of glider pilots the FLARM protocol is the important one, as it simultaneously offers both bidirectional air-to-air traffic awareness for collision avoidance and the option to be tracked by OGN ground stations.  SoftRF can run all day on a small internal battery.
 
 What can FLARM do that SoftRF cannot?
 
@@ -115,7 +115,7 @@ Another alternative to the built-in GNSS module is to add an external one.  See 
 
 The T-Echo (or Thinknode M1) offers a 1.5-inch e-paper display, which makes the device more self-contained.  But adjusting the settings on the T-Echo is more difficult than on the T-Beam, because the T-Echo does not have WiFi connectivity.  It also transmits at lower power, and the stock antenna is nice-looking but has low performance.  And it is more difficult to attach other devices to it.
 
-The Thinknode M3 offers the ability to run SoftRF in a very compact self-contained unit. The Sensecap T1000-E is similar but also has extra flash memory which allows it to record flight logs, as can the T-Beam and T-Echo and M1 but not the M3.  If you choose the T1000-E, be sure to read the instructions on how to do the necessary downgrade of the bootloader.
+The Thinknode M3 offers the ability to run SoftRF in a very compact self-contained unit. The Sensecap T1000-E is similar and also has extra flash memory which allows it to record flight logs, as can the T-Beam and T-Echo and M1 but not the M3.  If you choose the T1000-E, be sure to read the instructions on how to do the necessary downgrade of the bootloader.
 
 See also Jim Hogue's detailed document:
 https://github.com/moshe-braner/SoftRF/blob/master/documents/Guide_to_Building_SoftRF_and_SkyView-Jim_Hogue.pdf
@@ -163,11 +163,11 @@ On the Thinknode M3 and T1000-E, too, when connected to (or disconnected from) U
 
 After booting, SoftRF waits for the GNSS module to determine its location.  On a T-Beam (v1.x) the blue LED blinks rapidly (4 times per second) until a "fix" is achieved, at which point the GNSS red LED starts blinking slowly (once per second).  One can also see the number of satellites on the OLED display.  After that, if transmissions are off the blue LED is off.  If transmissions are on, the blue LED stays lit, unless the battery voltage is low, in which case it blinks slowly.
 
-On the T-Echo and M1 the display will show the number of GNSS satellites being received from, and more.  In addition, the T-Echo LED closest to the display will change color from green to blue.  On the M1 the LED will blink rapidly while waiting for a fix, and will stay lit once it is attained.
+On the T-Echo and M1 the display will show the number of GNSS satellites being received from, and more.  In addition, on the T-Echo the green part of the LED closest to the display will change from rapid blinking to constantly on (or slow blinking it battery is low).  Similarly on the M1 the LED will blink rapidly while waiting for a fix, and will stay lit once it is attained.
 
 On the M3 the LED will change from green to blue once a GNSS fix is attained.
 
-On the T1000-E the green LED will blink rapidly while waiting for a fix, and will stay lit once it is attained.
+On the T1000-E the green LED will blink rapidly while waiting for a fix, and will stay lit once it is attained (or slow blinking it battery is low).
 
 If a buzzer is installed on a T-Beam, it will emit a series of 4 beeps rising in pitch when done booting.  On the M1, M3 and T1000-E, an early beep (and turn-on of red LED) while booting, then when booting is complete a single beep followed by 1-5 short beeps to report the battery charge state (see above).  Later the busser will emit 2 shorter beeps rising in pitch when a GNSS fix is achieved.
 
@@ -230,7 +230,7 @@ But that tool does not offer the "Latest" alarm trigger method as a choice.  And
 
 Another method is to connect the T-Echo (or T-Beam, for that matter) via a USB cable to a computer with has a "terminal" program that can access the USB port as if it was a serial port.  Alternatively, use a Bluetooth terminal app.  Then look up the "Settings via NMEA" section in the "under the hood" document.
 
-A NEW and much better method is now available, and works for the T-Echo, M1, M3 and T1000-E: use the fantastic web page by Vlad Belayev (can be downloaded and used off-line too, at least via Bluetooth):  https://ogn.helioho.st/mysoftrf/  Open it in a browser that supports Web-BLE, e.g., Chrome or Edge, on a laptop or phone.  It connects to the device via Bluetooth LE, shows device status and settings (and traffic), and allows an easy way to change the settings.  It also allows connection via USB instead of Bluetooth (on some systems).  Turn on Bluetooth on your phone (or laptop), but do not "pair" the phone with the SoftRF device.  Instead, tap "BLE" (or "USB") in that web page, and select the SoftRF device in the list it shows.  This tool is still under development, so check back.  To use off-line on Android, tap the file in a file manager app and ask to open it in Chrome.  Chrome does not allow entering (nor bookmarking) the URL.  Tip: CX File Explorer allows adding a shortcut to the file to its home page.
+A NEW and much better method is now available, and works for the T-Echo, M1, M3 and T1000-E: use the fantastic web page by Vlad Belayev (can be downloaded and used off-line too, at least via Bluetooth):  https://skysignals.app/mysoftrf/  Open it in a browser that supports Web-BLE, e.g., Chrome or Edge, on a laptop or phone.  It connects to the device via Bluetooth LE, shows device status and settings (and traffic), and allows an easy way to change the settings.  It also allows connection via USB instead of Bluetooth (on some systems).  Turn on Bluetooth on your phone (or laptop), but do not "pair" the phone with the SoftRF device.  Instead, tap "BLE" (or "USB") in that web page, and select the SoftRF device in the list it shows.  This tool is still under development, so check back.  To use off-line on Android, tap the file in a file manager app and ask to open it in Chrome.  Chrome does not allow entering (nor bookmarking) the URL.  Tip: CX File Explorer allows adding a shortcut to the file to its home page.
 
 
 Description of the basic settings:
@@ -245,7 +245,7 @@ Aircraft ID: 6 hex digits.  If your aircraft is registered, you can enter its IC
 
 ID type to use: You can choose ICAO (the ID entered above), or Device (the fixed device ID).  (Additional ID types are available, see the "under the hood" document.)  Keep in mind that the transmitted ID depends on TWO settings.  E.g., if you enter the ICAO ID into the ID field but leave the ID Type as "device" then it will still transmit the device ID.  Whether you choose ICAO ID, or device ID, you can register your chosen ID on http://ddb.glidernet.org/ as your aircraft.  Then OGN viewers such as https://glidertracker.org/ will display your registration or contest ID.   If you don't register it then only the cryptic (6 hex digits) transmitted ID will be shown in those viewers.
 
-Protocol:  Choose "Latest" for compatibility with the new (2024) FLARM radio protocol.  Choose "Legacy" for the older FLARM radio protocol.  "Legacy" is visible to SoftRF devices and to OGN stations, but not to FLARMs.  (FLARMs are visible to SoftRF devices set to either "Latest" or "Legacy" setting.)  OGNTP is visible to OGN stations but invisible to FLARMS.  If you are using this device to see and be seen by other FLARM-equipped gliders, choose "Latest".  For towplanes: If the device is setting off collision alerts in gliders on tow (although that should not happen often), it can be configured to OGNTP (or Legacy), so that it does not alert FLARMs, but is still visible to OGN receivers on the ground for logging purposes.  But it is best to have the tow plane transmit in a protocol that makes it visible to the other gliders.  The FANET and P3I (PilotAware) protocols are also available choices, commonly used by paragliders, and by light planes in the UK, respectively.  New in version MB166: can also choose the ADS-L protocol.  Note that you can also choose to operate in two protocols at once, see the "under the hood" document.
+Protocol:  Choose "Latest" for compatibility with the new (2024) FLARM radio protocol.  Choose "Legacy" for the older FLARM radio protocol.  "Legacy" is visible to SoftRF devices and to OGN stations, but not to FLARMs.  (FLARMs are visible to SoftRF devices set to either "Latest" or "Legacy" setting.)  OGNTP is visible to OGN stations but invisible to FLARMS.  If you are using this device to see and be seen by other FLARM-equipped gliders, choose "Latest".  For towplanes: If the device is setting off collision alerts in gliders on tow (although that should not happen often), it can be configured to OGNTP (or Legacy), so that it does not alert FLARMs, but is still visible to OGN receivers on the ground for logging purposes.  But it is best to have the tow plane transmit in a protocol that makes it visible to the other gliders.  The FANET and PilotAware protocols are also available choices, commonly used by paragliders, and by light planes in the UK, respectively.  Can also choose the ADS-L protocol.  Note that you can also choose to operate in two protocols at once, see the "under the hood" document.
 
 Region (band): you must choose your geographical region, otherwise the radio will be on the wrong frequency and fail to communicate with the devices in other aircraft in your area.  E.g., choose EU (868 MHz) in Europe, and US (915 MHz) in the USA and Canada.  On devices other than the T-Beam the default region is "automatic", will be set upon first GNSS fix, but only saved for the future if the settings are saved manually.
 
@@ -259,7 +259,7 @@ Built-in Bluetooth: On the T-Beam, leave Off, unless you want to connect to an e
 
 NMEA output: this selects the port through which the data is sent out: Off (no data sent out), Serial (via the on-board serial interface, which also appears on the USB port), the auxiliary serial interface (T-Beam only), UDP (WiFi), TCP (another WiFi method), or Bluetooth.
 
-NMEA sentences: Data is sent to connected devices via text "sentences" in the NMEA format.  You can turn on or off each of the following types of sentences:  GNSS (position data), Sensors (e.g., barometric sensor, if you attach such to the board), Traffic (traffic data, reported to attached devices in the same format used by FLARM), and (in the advanced settings) External, meaning data arriving from external devices via other ports will be forwarded to this output port (see "data bridging").  Note that from version MB153 some of these settings are not simply on/off, but can control individual sentence subtype.  E.g., enabling GNSS sentences in the basic settings only activates the RMC and GGA sentences.  In the advanced settings (or via editing the settings.txt file) you can enter the value "3" (instead of "1") for this ("nmea_g") setting to also get GSA sentences (which are needed by Skydemon, for example).  Similarly enter "3" in nmea_s to get LK8EX1 sentences in addition to PGRMZ.
+NMEA sentences: Data is sent to connected devices via text "sentences" in the NMEA format.  You can turn on or off each of the following types of sentences:  GNSS (position data), Sensors (e.g., barometric sensor, if you attach such to the board), Traffic (traffic data, reported to attached devices in the same format used by FLARM), and (in the advanced settings) External, meaning data arriving from external devices via other ports will be forwarded to this output port (see "data bridging").  Note that from version MB153 some of these settings are not simply on/off, but can control individual sentence subtype.  E.g., enabling GNSS sentences in the basic settings only activates the RMC and GGA sentences.  In the advanced settings (or via editing the settings.txt file) you can enter the value "3" (instead of "1") for this ("nmea_g") setting to also get GSA sentences (which are needed by Skydemon, for example).  Similarly enter "3" in nmea_s to get LK8EX1 sentences in addition to PGRMZ.  Enter "5" (or "7") in nmea_t to include FLARM messaging - see the under-the-hood document.
 
 NMEA secondary output: two output ports are allowed simultaneously, e.g., Bluetooth and USB.  Or, UDP and TCP.  Note: Bluetooth at the same time as another wireless option (UDP or TCP) is not a good idea, because they both use the same radio hardware and would thus be in contention.
 
@@ -308,7 +308,7 @@ And so forth.  Note that after each "click" or "touch", it will take about 2 sec
 * press the reset button to reboot without changing the settings.
 The settings accessible via this method are:
 * AIRCRAFT TYPE:Glider, Towplane Helicopter, Powered, Hangglider, Paraglider, Dropplane, Parachute, Balloon, UAV, Static.
-* RF PROTOCOL: LATEST, LEGACY, OGNTP, P3I, FANET, ADS-L.
+* RF PROTOCOL: LATEST, LEGACY, OGNTP, PAW, FANET, ADS-L.
 * ALTERNATE PROTOCOL: same list
 * RF BAND (REGION): EU, US, UK, AU, NZ, RU, CN, IN, IL, KR.  (UK only for P3I.)
 * Collision prediction algorithm: Latest, Vector, Distance, None.
@@ -332,7 +332,7 @@ Many of the lines in the settings file have comments added at the end of the lin
 protocol (and altprotocol)
 0	none     /* for altprotocol */
 1	OGNTP
-2	P3I      /* PilotAware */
+2	PAW      /* PilotAware */
 5	FANET    /* Skytraxx */
 6	Legacy   /* Air V6 */
 7	Latest   /* new 2024 Air V7 protocol */
@@ -372,7 +372,7 @@ alarm
 
 volume (buzzer)
 0	off
-1	low
+1	low        // on some devices this is same as "full"
 2	full
 3	external (active buzzer)
 
@@ -629,7 +629,8 @@ https://github.com/moshe-braner/SoftRF/tree/master/software/firmware/binaries/nR
     - on the M3, press and hold the button for close to 20 seconds
     - on the T1000-E, flip the magnetic USB connector twice while holding the button pressed
          (see short video here: https://github.com/lyusupov/SoftRF/wiki/Card-Edition.-Quick-start )
-    - or, for any of these devices, connect from https://ogn.helioho.st/mysoftrf/ and click "update firmware"
+    - or, for any of these devices, connect from https://skysignals.app/mysoftrf/ and click "update firmware"
+    - or, on any device, from a terminal program, send it the NMEA sentence $PSRFC,DFU*2F
 * A virtual mass storage device labeled TECHOBOOT, T1000-E or ThinknodeM1/3 will then appear in your computer.
 * Drag the .uf2 firmware file and drop it into the window showing the virtual drive contents.
 * Wait until the file transfer is complete, it takes about 30 seconds.  The window will disappear and the device will normally reboot itself.

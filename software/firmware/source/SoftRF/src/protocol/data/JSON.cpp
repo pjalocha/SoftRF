@@ -540,8 +540,8 @@ void parseRAW(JsonObject root)
       if (memcmp(Container[i].raw, EmptyFO.raw, sizeof(EmptyFO.raw)) != 0) {
         size_t size = RF_Payload_Size(settings->rf_protocol);
         size = size > sizeof(Container[i].raw) ? sizeof(Container[i].raw) : size;
-        String str = Bin2Hex(Container[i].raw, size);
-        printf("%s\n", str.c_str());
+        char *str = bytes2Hex(Container[i].raw, size);
+        printf("%s\n", str);
       }
     }
 #endif

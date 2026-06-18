@@ -16,6 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <Wire.h>
+
 #include "../system/SoC.h"
 
 #include "Baro.h"
@@ -23,7 +25,7 @@
 #include "Battery.h"
 #include "../protocol/data/NMEA.h"
 
-// including MPL3115A2 still hangs at probe() even with ESP32 Core 2.0.3
+// including BMP180 & MPL3115A2 still hangs at probe() even with ESP32 Core 2.0.3
 // #define EXCLUDE_BMP280
 // #define EXCLUDE_BMP180
 #define EXCLUDE_MPL3115A2
@@ -352,12 +354,13 @@ byte Baro_setup()
 {
 Serial.println("baro setting up");
 
-  if ( SoC->Baro_setup() /* && Baro_probe() */ ) {    // Baro_probe() also called from inside ESP32_Baro_setup()
+  if ( SoC->Baro_setup() ) {    // Baro_probe() now called from inside SoC->Baro_setup()
 
     if (baro_chip == NULL) {
-        Serial.println(F("BUG WARNING! Baro_probe() was not called"));
+        //Serial.println(F("BUG WARNING! Baro_probe() was not called"));
         return BARO_MODULE_NONE;
     }
+
 
     Serial.print(baro_chip->name);
     Serial.println(F(" barometric pressure sensor is detected."));
@@ -376,6 +379,7 @@ Serial.println("baro setting up");
       Baro_VS[i] = 0;
     }
 
+    hw_info.baro = baro_chip->type;
     return baro_chip->type;
 
   } else {

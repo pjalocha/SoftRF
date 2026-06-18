@@ -4,7 +4,7 @@ Preliminary Documentation for Moshe Braner's version of SoftRF
 
 By Moshe Braner
 
-This version last updated May 15, 2026 to fit software version MB202
+This version last updated June 14, 2026 to fit software version MB203
 Get the latest version here:
   https://github.com/moshe-braner/SoftRF/blob/master/software/firmware/documentation
 or direct link:
@@ -43,19 +43,21 @@ pflaa_cs - 1 (default) to include "callsign" after hex ID in PFLAA sentences, 0 
 expire - number of seconds to keep reporting traffic not heard from - 1-30, default=5
     (note: the display device may keep reporting for longer, e.g., XCsoar for 5 more seconds)
 
-altprotocol - default=0, meaning none.  Set to 1 (OGNTP), 6 (Legacy), 7 (Latest) or 8 (ADS-L) to transmit in an alternative protocol once every 4 seconds.  This is if the main protocol is also 1, 6, 7 or 8.  The motivation being to take advantage of the better Forward Error Correction that is incorporated into the OGNTP to get effective tracking by ground stations to longer distances.  Or, to add ADS-L e-conspicuity where required or desired.  If altprotocol=1 and relay is enabled and there is landed-out traffic to be relayed, it is also relayed in the OGNTP protocol, taking priority over self-reporting, once per 16 seconds.  New in version mb174: Can mix Latest (or ADS-L) and either FANET or P3I, then time-slicing will be used to transmit and receive in both protocols.  Note that the same ID will be transmitted in all protocols used, including FANET (ignoring the convention for FANET to use a "vendor ID for the first 2 hex digits").  If you have registered a FANET ID, and you don't want to change it, then use the "override" id_method setting to force that ID - but that ID will then be sent in the other protocols too.
+altprotocol - default=0, meaning none.  Set to 1 (OGNTP), 6 (Legacy), 7 (Latest) or 8 (ADS-L) to transmit in an alternative protocol once every 4 seconds.  This is if the main protocol is also 1, 6, 7 or 8.  The motivation being to take advantage of the better Forward Error Correction that is incorporated into the OGNTP to get effective tracking by ground stations to longer distances.  Or, to add ADS-L e-conspicuity where required or desired.  If altprotocol=1 and relay is enabled and there is landed-out traffic to be relayed, it is also relayed in the OGNTP protocol, taking priority over self-reporting, once per 16 seconds.  New in version mb174: Can mix Latest (or ADS-L) and either FANET or PAW, then time-slicing will be used to transmit and receive in both protocols.  Note that the same ID will be transmitted in all protocols used, including FANET (ignoring the convention for FANET to use a "vendor ID for the first 2 hex digits").  If you have registered a FANET ID, and you don't want to change it, then use the "override" id_method setting to force that ID - but that ID will then be sent in the other protocols too.
 
-flr_adsl - default=0.  If set to 1, reception will be in simultaneous Latest+ADS-L mode (in time slot 0).  And in  dual-protocol modes Latest+FANET, Latest+P3I and Latest+OGNTP will also transmit in ADS-L occasionally.
+flr_adsl - default=0.  If set to 1, reception will be in simultaneous Latest+ADS-L mode (in time slot 0).  And in  dual-protocol modes Latest+FANET, Latest+PAW and Latest+OGNTP will also transmit in ADS-L occasionally.
 
 nmea_out and nmea_out2 - NMEA output destination codes are: 0=off 1=serial 2=UDP 3=TCP 4=USB 5=Bluetooth 6=secondary serial.  Some destinations are not available on some devices, e.g., the T-Echo, M1, M3 and T1000-E have BT (BLE) but not UDP nor TCP nor secondary serial.
 
-Some settings are now bitfields - these are two hexadecimal digits:
+Some settings are now bitfields (can set more than one bit) - these are two hexadecimal digits:
 nmea_g & nmea2_g - 1 for basic (GGA+RMC), 2 for GSA (3 for basic+GSA), 4=GST 8=GSV F=all
 nmea_s & nmea2_s - 1 for basic (PGRMZ), 2 for LK8EX1 (3 for both)
-nmea_t & nmea2_t - 1 for basic (PFLAU+PFLAA), 8 for PFLAJ (9 for both)
+nmea_t & nmea2_t - 1 for PFLAU+PFLAA, 2 for PFLAJ, 4 for PFLAM, 8 for FNNGB
 nmea_e & nmea2_e - 1 for "tunnel" from connected devices, 2 for generated (strobe, alarm)
-nmea_d & nmea2_d - now a 24-bit bitfield, see values in Settings.h
-nmea_p & nmea2_p - debug output from original SoftRF, my version added nmea_d
+
+debug_flags - now a 32-bit bitfield, see DEBUG_* values in Settings.h
+nmea_d & nmea2_d - enable debug output from my version of SoftRF
+nmea_p & nmea2_p - debug output from original SoftRF
 
 baud_rate - baud rate code (1=4800 2=9600 3=19200 4=38400 5=57600 6=115200) for the main serial/USB port.  The code "0" means the default baud rate, which is 38400.
 
@@ -70,7 +72,7 @@ loginterval - interval (seconds) between flight log position records, 1 to 155
 
 compflash - On a T-Beam with an SD card this setting is ignored.  On a T-Beam without SD card: 0=log to RAM only, 1=also compress to IGZ file in flash.  On a T-Echo, M1 or T1000-E: 0=record uncompressed IGC files, 1=record compressed IGZ files.  See the "Flight logging" section in the user guide for decompressing instructions.
 
-alarmlog - Alarms Log: If enabled (1), every time a traffic alarm is issued (whether audible or not), a line of text is written into the alarmlog.txt file (in flash). (If flight logging, similar data is also inserted as an LPLT comment.)  This line includes the date, time, lat/lon, alarm level (1-3), aircraft ID, relative heading, and horizontal and vertical separation (in meters).  On the T-Beam, if you want to download this data, use the web interface and click the "Alarm Log: [Download]" button at the bottom of the status page.  The existing file is normally appended to.  If space in the flash file system is low, the alarm log file is erased and a new one created.  You can also do that manually by clicking the "Alarm Log: [Clear]" button on the status page.
+alarmlog - Alarms Log: If enabled (1), every time a traffic alarm is issued (whether audible or not), a line of text is written into the alarmlog.txt file (in flash). (If flight logging, similar data is also inserted as an LSRF comment.)  This line includes the date, time, lat/lon, alarm level (1-3), aircraft ID, relative heading, and horizontal and vertical separation (in meters).  On the T-Beam, if you want to download this data, use the web interface and click the "Alarm Log: [Download]" button at the bottom of the status page.  The existing file is normally appended to.  If space in the flash file system is low, the alarm log file is erased and a new one created.  You can also do that manually by clicking the "Alarm Log: [Clear]" button on the status page.
 
 log_nmea - option to log all NMEA output to an attached SD card (T-Beam only).  Logging starts only when a GNSS fix is attained, using the date to name the file, similar to the IGC flight log file naming.  E.g., 52B1NMEA.txt.
 
@@ -83,6 +85,10 @@ geoid - Geoid Separation.  Only accessible via editing the settings.txt file.  M
 power_save - 1 to turn Wifi or Bluetooth off after 10 minutes to save power (extend battery run time).  For Wifi that is done only if no client is connected.  For Bluetooth that is done only if not connected.  To restore connectivity, reboot SoftRF.  Leave as 0 (disabled) to keep the WiFi or BT on - e.g., if you are sending data wirelessly throughout the flight to another device.
 
 power_ext - 1 to automatically shut down after a while if external power was disconnected, in a device that also has an internal battery - see "How to power the SoftRF device" section in the user guide.  This setting also prevents the device from entering "charging mode" instead of fully booting when both USB and battery power are present.  If no internal battery is installed, this setting is irrelevant.
+
+callsign - sent as "pilot name" in FANET protocol.  In Latest protocol, if "messaging" is enabled, the igc_cs is used for the ACALL transmissions, unless it is blank, in which case the "callsign" is used.
+
+auto_sos - 0=off 1=manual 2=auto.  See the "FANET messages" section below.
 
 On the T-Beam only:
 
@@ -137,16 +143,16 @@ sd_card - SD card adapter: If such an adapter is added to a T-Beam, change this 
 
 On the T-Echo and Thinknode M1 only, with the e-paper display:
 
-epd_units - 0=metric 1=imperial 2=mixed
-epd_zoom - default zoom level
-epd_rotate - display direction (upside down, sideways...)
-epd_orient - track up or North up
-epd_adb - aircraft database type
-epd_idpref - which field(s) in the database to display in the text page: 0=reg 1=tail 2=model 3=type
-epd_vmode - default viewmode: 0=status 1=radar 2=text ...
-epd_aghost - automatic anti-ghosting screen-clearing: 0=off 1=auto 2=2min 3=5min
+units - 0=metric 1=imperial 2=mixed
+zoom - default zoom level
+rotate - display direction (upside down, sideways...)
+orientation - track up or North up
+adb - aircraft database type
+idpref - which field(s) in the database to display in the text page: 0=reg 1=tail 2=model 3=type
+viewmode - default viewmode: 0=status 1=radar 2=text ...
+antighost - automatic anti-ghosting screen-clearing: 0=off 1=auto 2=2min 3=5min
     - the "off" setting turns on auto-screen-saver, the display will become blank after some minutes, click the mode button to turn the display back on
-epd_team - see Linar's T-Echo documentation
+team - see Linar's T-Echo documentation
 
 
 ADD-ONS
@@ -217,7 +223,7 @@ Single protocols:
 * OGNTP
     - if flr_adsl=1 receive in flr_adsl dual mode in time slot 0 every 4 seconds
 * FANET
-* P3I (Pilot Aware)
+* PAW (Pilot Aware, P3I)
 Mixed protocols:
 * Latest + ADS-L
     - tx & rx in Latest, except every 4 seconds in slot 0 tx in ADSL - note no ADSL rx
@@ -237,13 +243,13 @@ Time-slicing dual protocol modes:
         in slot 0 rx in flr_adsl simultaneous dual mode
             and every 8 seconds tx in ADSL
 * FANET + Latest - same as Latest + FANET above
-* Latest + P3I
+* Latest + PAW
         in slot 0: tx & rx in Latest
-        in slot 1: tx & rx in P3I
+        in slot 1: tx & rx in PAW
     - if flr_adsl=1:
         in slot 0 rx in flr_adsl simultaneous dual mode
             and every 8 seconds tx in ADSL
-* P3I + Latest - same as Latest + P3I above
+* PAW + Latest - same as Latest + PAW above
 * FANET + OGNTP
         in slot 0: tx and rx in OGNTP
         in slot 1: tx & rx in FANET
@@ -256,15 +262,15 @@ Time-slicing dual protocol modes:
     - if flr_adsl=1:
          in slot 0 rx in flr_adsl dual mode, tx in ADSL
             and every 8 seconds tx in Latest
-* P3I + ADS-L
+* PAW + ADS-L
          in slot 0 tx & rx in ADSL
-         in slot 1 tx & rx in P3I
+         in slot 1 tx & rx in PAW
     - if flr_adsl=1:
          in slot 0 rx in flr_adsl dual mode, tx in ADSL
             and every 8 seconds tx in Latest
-* P3I + OGNTP
+* PAW + OGNTP
             slot 0: tx and rx in OGNTP
-            slot 1: tx & rx in P3I
+            slot 1: tx & rx in PAW
     - if flr_adsl=1:
          in slot 0 rx in flr_adsl simultaneous dual mode every 4 seconds
             and every 8 seconds tx in ADSL - note no tx in Latest
@@ -323,7 +329,7 @@ Revised this code to be much more compact and readable.
 
 And, since version MB152: $PSRFS for one-setting-at-a-time configuration.  This is far easier to use than $PSRFC/D/F.  Each setting is identified by its label, such as "id_method" or "tx_power".  Send $PSRFS,?*57 to get a list of all the settings and their current values, formatted as in the settings file.  $PSRFS,0,label,? to query one setting.  $PSRFS,0,label,value to change one setting at a time (and later $PSRFC,SAV*3C to save and reboot).  Or use $PSRFS,1,label,value to change one setting and save and reboot immediately.  Each sentence must end with a "*" followed by a valid NMEA checksum, but you can send the sentence with any two characters as the checksum, for example  $PSRFS,0,id_method,?*xx  and SoftRF will send a reply showing what the correct checksum is.  It insists on the correct checksum before doing anything with the sentence, since the NMEA config mechanism is mostly intended for automated setup by a connected device.
 
-A much more convenient way to check and adjust the settings is by using this web page:  https://ogn.helioho.st/mysoftrf/  - which works through the $PSRF* mechanism, via BLE or USB.
+A much more convenient way to check and adjust the settings is by using this web page:  https://skysignals.app/mysoftrf/  - which works through the $PSRF* mechanism, via BLE or USB.
 
 If reading the settings.txt file fails, SoftRF will automatically read the settings from EEPROM.  If writing the settings to a file fails, SoftRF will automatically write the settings to EEPROM.  If you have a device such as a T-Echo or Thinknode M1 that has a faulty SPI flash chip, or for some reason the file system on the flash chip has problems, and the automatic use of EEPROM does not work, you can force the settings storage to be on EEPROM instead of a file.  This is done by setting the fifth bit in the "mode" setting: PSRFS,1,mode,16*5D - to cancel that and return to normal mode, use PSRFS,1,mode,0*6A
 
@@ -403,7 +409,7 @@ Fixed a bug in the time computation.  Code now says "+ time_corr_neg".  Also han
 
 Rewrote determination of time slots for frequency hopping
 
-Wrote new code to compute the frequency hopping time slots for the FLARM-compatible protocol. (And also for OGNTP, which uses the same general scheme, but set up to use a different frequency than FLARM at any given moment.)  The original SoftRF code is buggy (and incomprehensible).  The second time slot, 800 to 1200 ms after the seconds tick, spans the next second tick (PPS).  The original SoftRF code switches to a new frequency at 1000 ms, due to passing the new Time (seconds UTC) to the frequency hashing function. T his is incorrect.  The full "Slot 1" should use the frequency based on the previous second's Time.  The new Time is adopted later, around 1300 ms, during the 200 ms dead time between Slot 1 and Slot 0.  The new code also computes the slot & channel once for the 400 ms duration of the Slot, for efficiency, instead of over and over in the general loop.  Variables keep track of when a new computation is later needed.  The random time to transmit within each time slot is also computed in advance at that time.  The time slots and channels for Latest/Legacy/OGNTP protocols are computed in driver/RF.cpp - RF_loop().  RF_time holds the timestamp on which the frequency hopping and encryption key are based, it increments 300 ms after the UTC PPS which increments Ourtime.  For other protocols (P3I, FANET) the original timing code is still in place.
+Wrote new code to compute the frequency hopping time slots for the FLARM-compatible protocol. (And also for OGNTP, which uses the same general scheme, but set up to use a different frequency than FLARM at any given moment.)  The original SoftRF code is buggy (and incomprehensible).  The second time slot, 800 to 1200 ms after the seconds tick, spans the next second tick (PPS).  The original SoftRF code switches to a new frequency at 1000 ms, due to passing the new Time (seconds UTC) to the frequency hashing function. T his is incorrect.  The full "Slot 1" should use the frequency based on the previous second's Time.  The new Time is adopted later, around 1300 ms, during the 200 ms dead time between Slot 1 and Slot 0.  The new code also computes the slot & channel once for the 400 ms duration of the Slot, for efficiency, instead of over and over in the general loop.  Variables keep track of when a new computation is later needed.  The random time to transmit within each time slot is also computed in advance at that time.  The time slots and channels for Latest/Legacy/OGNTP protocols are computed in driver/RF.cpp - RF_loop().  RF_time holds the timestamp on which the frequency hopping and encryption key are based, it increments 300 ms after the UTC PPS which increments Ourtime.  For other protocols (PAW, FANET) the original timing code is still in place if used as the only protocol.
 
 Audio alarms
 
@@ -517,7 +523,7 @@ Once the library objects are created, SoftRF uses up almost all available heap s
 
 Handling of altitudes
 
-In version MB146 this has been revised.  Altitudes stored within SoftRF are now relative to the WGS84 ellipsoid, not MSL.  This is what is transmitted by FLARMs and what is output to IGC flight log files, so this simplifies things.  Altitudes reported in GGA sentences to attached devices are MSL, along with the "geoid separation", as is standard.  Altitudes transmitted and received in OGNTP protocol are MSL.  Not clear what FANET and P3I want.  ADS-B altitudes are pressure altitudes.
+In version MB146 this has been revised.  Altitudes stored within SoftRF are now relative to the WGS84 ellipsoid, not MSL.  This is what is transmitted by FLARMs and what is output to IGC flight log files, so this simplifies things.  Altitudes reported in GGA sentences to attached devices are MSL, along with the "geoid separation", as is standard.  Altitudes transmitted and received in OGNTP protocol are MSL.  Not clear what FANET and PAW want.  ADS-B altitudes are pressure altitudes.
 
 The latest protocol
 
@@ -554,7 +560,7 @@ From version MB155, SoftRF collects summary data about the distance and receptio
         9.4,3.226,1234  # range (km), log2(range), number of samples - for "oclock=0" (straight ahead)
         ...             # similarly for each "oclock" 1 through 11
         -91.4,2.58      # average RSSI, mean square deviation
-The file is read, new data appended during the flight, and a new version of the file is written after landing.  If a flight log is being recorded, the range statistics are also written as "LPLTAN,..." comment lines in the IGC file.  Samples are only taken if airborne, of other aircraft that are airborne, and at least 1km away and not at too high or low a vertical angle.  ADS-B traffic is not sampled.  The range averaging is done on a log scale, but the range numbers as plain km appear as the first item in each line in the file.  If, after enough data has been collected, the range is much lower in some directions than others, the antenna placement may not be ideal.  If the RSSI average is much higher (less negative) than -100, there is radio noise in the cockpit making SoftRF reception less sensitive.  E.g., a USB power converter may generate such noise.  If the RSSI mean square deviation is large, such noise may be intermittent, perhaps caused by a device that is only sometimes carried along or turned on.  To forget the old data and start over collecting new range data, delete the file range.txt.
+The file is read, new data appended during the flight, and a new version of the file is written after landing.  If a flight log is being recorded, the range statistics are also written as "LSRFAN,..." comment lines in the IGC file.  Samples are only taken if airborne, of other aircraft that are airborne, and at least 1km away and not at too high or low a vertical angle.  ADS-B traffic is not sampled.  The range averaging is done on a log scale, but the range numbers as plain km appear as the first item in each line in the file.  If, after enough data has been collected, the range is much lower in some directions than others, the antenna placement may not be ideal.  If the RSSI average is much higher (less negative) than -100, there is radio noise in the cockpit making SoftRF reception less sensitive.  E.g., a USB power converter may generate such noise.  If the RSSI mean square deviation is large, such noise may be intermittent, perhaps caused by a device that is only sometimes carried along or turned on.  To forget the old data and start over collecting new range data, delete the file range.txt.
 
 Dual-protocol reception
 
@@ -577,9 +583,21 @@ Transition to RadioLib
 
 Versions MB200+ use the RadioLib library instead of the Basicmac library to access the radio modules.  This allows use of the LR1110 radio module in the Thinknode M3 and T1000-E.  And this should make it easy to add support for other radio modules in the future, notably the LR2021.
 
+FLARM messaging
+
+Starting in version MB203:  When receiving FLARM text messages (transmitted by FLARMs with $PFLAC,S,MSG,1 in their config file), SoftRF decodes them and outputs a $PFLAM NMEA sentence.  And, every once in a while (about twice per minute) SoftRF transmits, in a format that FLARM and SoftRF can decode, a text message with one of the following bits of text, if configured: callsign, pilot name, aircraft type, or aircraft registration.  These periodical message types are interpreted by XCsoar based on the $PFLAM NMEA output.  This information is also included in flight logs generated by SoftRF, in LSRFM comment lines (if the logflight setting is set to 3).  And, this information is used to fill in the "callsign" of tracked aircraft (if not filled in from some other source), and will thus be included in $PFLAA sentences as long as the pflaa_cs setting is enabled.
+
+Messaging - both incoming and outgoing - are activated via the "pflam" (8) bit in the nmea_t and nmea2_t settings.  Messaging is reciprocal: if neither nmea_t nor nmea2_t have the "pflam" (8) bit set, or if stealth or no_track are enabled, then both reception and transmission of text messages is disabled.  If using serial (or USB) NMEA output, the baud rate must be at least 38400, otherwise the "pflam" bit is cleared for that output port.  (It may still be enabled for another port, e.g., Bluetooth.)  Baud rates lower than 38400 are not recommended in any case, as they may not keep up with traffic data when it is heavy.
+
+FANET messaging
+
+Starting in version MB203, when receiving FANET transmissions, SoftRF decodes FANET text messages, including pilot-name, broadcast, and unicast messages.  The problem is how to output them to a device that will display them.  Currently SoftRF outputs these as FLARM messaging ($PFLAM) sentences, which are limited to 17 characters of text.  Supposedly XCsoar can interpret those.  (Vlad Belayev's fork of SoftRF can output them in #FNF sentences which are interpreted by some paragliding-oriented apps.)  Additionally, received FANET pilot names are inserted into the "callsign" of the tracked aircraft, and thus may appear in $PFLAA sentences to be displayed as traffic labels by some attached navigation apps.
+
+Outgoing messages can report a distress situation, possibly automatically (3 minutes after landing, if not manually canceled by double-click).  Can double-click the button (on a T1000-E) to manually start (or stop) sending "distress" ground status, as long as the auto_sos setting is not set to 0 (off).  In any case, FANET tracking messages are continued after landing, using the FANET ground tracking protocol, but reporting the status "landed OK" (9) by default.  If rebooted, in FANET protocol, SoftRF will transmit air tracking data, even if still on the ground.
+
 Transition of PilotAware to ADS-L packet format
 
-Starting in version MB201 of SoftRF the PilotAware protocol uses the ADS-L O-band low-data-rate packet format, as described in "issue 2" of ADS-L and adopted by PilotAware.  Unlike the commercial PilotAware devices, SoftRF now *only* uses the new packet format, even in the presence of devices that still transmit in the old PilotAware protocol.
+Starting in version MB201 of SoftRF the PilotAware protocol uses the ADS-L O-band low-data-rate packet format, as described in "issue 2" of ADS-L and adopted by PilotAware.  Unlike the commercial PilotAware devices, SoftRF now *only* transmits the new packet format, even in the presence of devices that still transmit in the old PilotAware protocol.  But, in version MB203, restored decoding of incoming messages using the old PilotAware protocol, if decoding of a message in the new protocol fails.
 
 
 KNOWN ISSUES
@@ -589,8 +607,6 @@ Packets-transmitted count on OLED sometimes increments by dozens or hundreds at 
 Packets-received occasionally increments on the T-Echo while there is no traffic within range.  The code reports "RF loopback", meaning an exact replica of the last transmitted packet appears as if it was received.  Probably a bug in programming the sx1262 registers.  This is apparently harmless.  (The sx1276 bug which caused some received packets to be actually retransmitted has been fixed.)
 
 Reception of FLARM signals can be further improved by shifting our clock (for frequency hopping) by about 50 ms.  Not clear why.
-
-The RSSIs reported by RadioLib seem to be much lower than those reported by the Basicmac library, at least on the sx1262.  Not clear why, since they access the same sx1262 registers.  For now, a fixed value of 30 is added to the reported dBm, e.g., -90 is reported as -60.
 
 There are some issues with the Thinknode M1 still being worked on: buzzer and buttons and LEDs.
 

@@ -45,7 +45,9 @@
 #include "../protocol/data/GDL90.h"
 #include "../protocol/data/D1090.h"
 #include "../protocol/data/IGC.h"
+//#include "../protocol/radio/FANET.h"
 #include "../system/Time.h"
+#include "../Wind.h"
 
 #include "uCDB.hpp"
 
@@ -135,7 +137,6 @@ static bool nRF52_has_rtc      = false;
 static bool nRF52_has_spiflash = false;
 static bool RTC_sync           = false;
 static bool ADB_is_open        = false;
-// static bool nRF52_has_vff      = false; /* very first fix */
 
 static uint8_t mode_button_pin = SOC_UNUSED_PIN;
 static uint8_t up_button_pin   = SOC_UNUSED_PIN;
@@ -884,7 +885,7 @@ nRF52_WDT_fini();
   }
 #endif /* EXCLUDE_IMU */
 
-  Wire.end();
+//  Wire.end();         <<< maybe this was preventing baro_probe() from working?
 
 nRF52_WDT_fini();
 
@@ -960,7 +961,8 @@ nRF52_WDT_fini();
 
   if (nRF52_board == NRF52_LILYGO_TECHO_REV_0
   ||  nRF52_board == NRF52_LILYGO_TECHO_REV_1
-  ||  nRF52_board == NRF52_LILYGO_TECHO_REV_2) {
+  ||  nRF52_board == NRF52_LILYGO_TECHO_REV_2
+  ||  nRF52_board == NRF52_LILYGO_TECHO_PLUS) {
 #if 1
 #if !defined(ARDUINO_ARCH_MBED) && !defined(ARDUINO_ARCH_ZEPHYR)
       // detect the SHUTDOWN_MAGIC from the first shutdown (software reset)
@@ -1707,7 +1709,7 @@ static void nRF52_post_init()
   Serial.println();
   Serial.flush();
 
-#if 1
+#if 0
   // >>> see what was passed from the previous shutdown
   Serial.print("reset_reason: ");
   Serial.println(reset_reason, HEX);
@@ -3337,7 +3339,7 @@ static bool nRF52_Baro_setup() {
         return false;
   // Baro_probe() no longer called from Baro_setup() so need to call it here:
   if (Baro_probe()) {                  // found baro sensor on Wire
-      Serial.println(F("BMP found"));
+      //Serial.println(F("BMP found"));
       return true;
   }
   return false;
@@ -3381,7 +3383,7 @@ void handleEvent(AceButton* button, uint8_t eventType,
   switch (eventType) {
 
     case AceButton::kEventClicked:
-    // case AceButton::kEventReleased:
+    case AceButton::kEventReleased:    // was commented out
 
       if (nRF52_board == NRF52_ELECROW_TN_M3 || nRF52_board == NRF52_SEEED_T1000E) {
 
@@ -3416,13 +3418,30 @@ void handleEvent(AceButton* button, uint8_t eventType,
     case AceButton::kEventDoubleClicked:
       if (button == &button_1) {
 
-      if (nRF52_board == NRF52_SEEED_T1000E) {
+      if (nRF52_board == NRF52_SEEED_T1000E
+      ||  nRF52_board == NRF52_ELECROW_TN_M3) {
 
-             // TBD  <<< Vlad does stuff here
+        /* if SOS countdown is active, cancel it and confirm Landed OK */
+        if (ground_status == GROUND_STATUS_COUNTDOWN) {
+            ground_status = GROUND_STATUS_LANDED_OK;
+            tone(buzzerpin, 1600, 250); delay(300);
+            tone(buzzerpin, 1300, 250); delay(300);
+        /* else normal distress toggle */
+        } else if (ground_status >= GROUND_STATUS_NEED_MED || ground_status == GROUND_STATUS_NEED_RIDE) {
+            ground_status = GROUND_STATUS_LANDED_OK;
+            tone(buzzerpin, 1600, 250); delay(300);
+            tone(buzzerpin, 1300, 250); delay(300);
+        } else if (ground_status > GROUND_STATUS_COUNTDOWN) {
+            if (settings->auto_sos == AUTO_SOS_OFF)
+                ground_status = GROUND_STATUS_NEED_RIDE;
+            else
+                ground_status = GROUND_STATUS_DISTRESS;
+            fanet_sos_count = 0;   // send several SOS messages (again)
+            tone(buzzerpin, 1300, 250); delay(300);
+            tone(buzzerpin, 1600, 250); delay(300);
+        }
 
-      } else if (nRF52_board == NRF52_ELECROW_TN_M3) {
-
-             // TBD
+        // Vlad switches to FANET protocol here
 
       } else {   // T-Echo and TN-M1
 
@@ -3590,13 +3609,11 @@ static void nRF52_Button_setup()
   UpButtonConfig->setDoubleClickDelay(600);
   UpButtonConfig->setLongPressDelay(2000);
 
-#if 0
 //  attachInterrupt(digitalPinToInterrupt(mode_button_pin), onModeButtonEvent, CHANGE );  <<< why is this commented out?
 
   if (up_button_pin != SOC_UNUSED_PIN) {
       attachInterrupt(digitalPinToInterrupt(up_button_pin),   onUpButtonEvent,   CHANGE );   // <<< why needed?
   }
-#endif
 }
 
 static void nRF52_Button_loop()

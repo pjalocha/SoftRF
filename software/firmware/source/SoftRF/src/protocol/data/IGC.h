@@ -15,7 +15,7 @@ void logFlightPosition();
 void completeFlightLog();
 void closeFlightLog();
 const char *FlightLogStatus();
-void FlightLogComment(const char *data);
+void FlightLogComment(const char *data, bool force=false);
 void MD5_test();
 
 #if defined(ARDUINO_ARCH_NRF52)

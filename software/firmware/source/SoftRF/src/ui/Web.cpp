@@ -52,6 +52,7 @@ void Web_fini()     {}
 #include "../driver/Bluetooth.h"
 #include "../TrafficHelper.h"
 #include "../protocol/radio/Legacy.h"
+//#include "../protocol/radio/FANET.h"
 #include "../protocol/data/NMEA.h"
 #include "../protocol/data/IGC.h"
 #include "../protocol/data/GDL90.h"
@@ -688,12 +689,11 @@ void handleSettings() {
 <option %s value='%d'>%s</option>\
 <option %s value='%d'>%s</option>\
 <option %s value='%d'>%s</option>\
-<option %s value='%d'>%s</option>\
 </select>\
 </td>\
 </tr>"),
-    (settings->rf_protocol == RF_PROTOCOL_LEGACY ? "selected" : ""),
-     RF_PROTOCOL_LEGACY, legacy_proto_desc.name,
+//    (settings->rf_protocol == RF_PROTOCOL_LEGACY ? "selected" : ""),
+//     RF_PROTOCOL_LEGACY, legacy_proto_desc.name,
     (settings->rf_protocol == RF_PROTOCOL_LATEST ? "selected" : ""),
      RF_PROTOCOL_LATEST, "Latest",
     (settings->rf_protocol == RF_PROTOCOL_OGNTP ? "selected" : ""),
@@ -1421,8 +1421,8 @@ void handleRoot() {
     hr, min % 60, sec % 60, ESP.getFreeHeap(),
     (low_voltage==1? "red" : (low_voltage==0? "green": "black")), str_vbat, str_vusb,
     tx_s, rx_packets_counter, adsb_s, acrfts_counter, traffics,
-    (landed_out_mode? "Active" : "Off"),
-    (landed_out_mode? "Stop" : "Activate"),
+    (ground_status == GROUND_STATUS_NEED_RIDE? "Active" : "Off"),
+    (ground_status == GROUND_STATUS_NEED_RIDE? "Stop" : "Activate"),
     ((hw_info.model == SOFTRF_MODEL_PRIME_MK2) ?
  "<input type=button onClick=\"location.href='/gps_reset'\" value='Reset GNSS'>" : ""),
     (isValidGNSSFix() ? (leap_seconds_valid()==1? "green" : "black") : "red"),
@@ -2291,14 +2291,14 @@ void Web_setup()
   } );
 
   server.on ( "/landed_out", []() {
-    if (landed_out_mode) {
-        landed_out_mode = false;
+    if (ground_status == GROUND_STATUS_NEED_RIDE || ground_status > GROUND_STATUS_LANDED_OK) {
+        ground_status == GROUND_STATUS_LANDED_OK;
         OLED_msg("NORMAL", "MODE");
         Serial.println("landed_out_mode off");
         server.send(200, texthtml,
           "<html><p align=center><h3 align=center>LANDED-OUT MODE STOPPED</h3></p></html>");
     } else {
-        landed_out_mode = true;
+        ground_status = GROUND_STATUS_NEED_RIDE;
         OLED_msg("LANDED", "OUT");
         Serial.println("landed_out_mode on");
         server.send(200, texthtml,

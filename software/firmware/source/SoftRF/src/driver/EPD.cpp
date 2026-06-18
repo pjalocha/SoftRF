@@ -55,24 +55,7 @@ const char EPD_Flash_text[]   = "FLASH   ";
 const char EPD_Baro_text[]    = "BARO    ";
 const char EPD_IMU_text[]     = "IMU     ";
 
-const char *Aircraft_Type[] = {
-  [AIRCRAFT_TYPE_UNKNOWN]    = "Unkwn",
-  [AIRCRAFT_TYPE_GLIDER]     = "Glider",
-  [AIRCRAFT_TYPE_TOWPLANE]   = "Towpln",
-  [AIRCRAFT_TYPE_HELICOPTER] = "Helicp",
-  [AIRCRAFT_TYPE_PARACHUTE]  = "Parach",
-  [AIRCRAFT_TYPE_DROPPLANE]  = "Dropln",
-  [AIRCRAFT_TYPE_HANGGLIDER] = "Hanggl",
-  [AIRCRAFT_TYPE_PARAGLIDER] = "Paragl",
-  [AIRCRAFT_TYPE_POWERED]    = "Powerd",
-  [AIRCRAFT_TYPE_JET]        = "Jet",
-  [AIRCRAFT_TYPE_UFO]        = "UFO",
-  [AIRCRAFT_TYPE_BALLOON]    = "Blloon",
-  [AIRCRAFT_TYPE_ZEPPELIN]   = "Zeppel",
-  [AIRCRAFT_TYPE_UAV]        = "UAV",
-  [AIRCRAFT_TYPE_RESERVED]   = "Reserv",
-  [AIRCRAFT_TYPE_STATIC]     = "Static"
-};
+// Aircraft_Type[] moved to TrafficHelper
 
 const char *Region_Label[] = {
   [RF_BAND_AUTO] = "**",
@@ -497,7 +480,7 @@ void EPD_loop()
   if (screen_off)    // in screen-saver mode
       return;
 
-  if (ui->antighost == ANTI_GHOSTING_OFF) {   // auto screen-save
+  if (ui->antighost == ANTI_GHOSTING_OFF) {          // auto screen-save
     if (millis() > screen_saver_timer + 600000) {    // no buttonpush for 10 minutes
       nRF52_Display_blank();
       return;
@@ -563,10 +546,10 @@ void EPD_loop()
 
       EPD_prev_view = EPD_view_mode;
 
-      bool auto_ag_condition = ui->antighost == ANTI_GHOSTING_AUTO  &&
-                               (EPD_view_mode == VIEW_MODE_RADAR ||
-                                EPD_view_mode == VIEW_MODE_TEXT) ?
-                               (Traffic_Count() == 0) : true;
+      bool auto_ag_condition = (ui->antighost == ANTI_GHOSTING_AUTO  &&
+                                (EPD_view_mode == VIEW_MODE_RADAR ||
+                                 EPD_view_mode == VIEW_MODE_TEXT)) ?
+                                (Traffic_Count() == 0) : true;
 
       if (anti_ghosting_minutes > 0                                                &&
           (millis() - EPD_anti_ghosting_timer) > (anti_ghosting_minutes * 60000UL) &&

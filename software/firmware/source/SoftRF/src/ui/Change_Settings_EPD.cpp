@@ -62,11 +62,11 @@ set_entry actypes[] = {
 };
 
 set_entry protocols[] = {
-  {RF_PROTOCOL_LEGACY,    "LEGACY"},
+//  {RF_PROTOCOL_LEGACY,    "LEGACY"},
   {RF_PROTOCOL_LATEST,    "LATEST"},
   {RF_PROTOCOL_ADSL,      "ADS-L"},
   {RF_PROTOCOL_OGNTP,     "OGNTP"},
-  {RF_PROTOCOL_P3I,       "P3I"},
+  {RF_PROTOCOL_PAW,       "PAW"},
   {RF_PROTOCOL_FANET,     "FANET"},
   {RF_PROTOCOL_NONE,      "NONE"},
 //  {RF_PROTOCOL_ADSB_UAT,  "ADSB-UAT"},

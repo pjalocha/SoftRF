@@ -35,7 +35,7 @@
 #include <raspi/raspi.h>
 #endif /* RASPBERRY_PI */
 
-#define SOFTRF_FIRMWARE_VERSION "MB202"
+#define SOFTRF_FIRMWARE_VERSION "MB203"
 #define SOFTRF_IDENT            "SoftRF"
 #define SOFTRF_USB_FW_VERSION   0x0101
 
@@ -191,6 +191,7 @@ typedef struct CONTAINER {
     int8_t    rssi;
     int8_t    mindistrssi;
     int8_t    maxrssi;
+    int8_t    pflam;
 
     /* ADS-B (ES, UAT, GDL90) specific data */
     uint32_t  positiontime;

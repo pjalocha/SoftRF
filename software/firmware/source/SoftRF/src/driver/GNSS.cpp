@@ -1440,15 +1440,23 @@ const gnss_chip_ops_t at65_ops = {
 static gnss_id_t ag33_probe()
 {
   // try and ensure the GPS is awake:
+  delay(250);
   Serial_GNSS_Out.write("\r\n$PAIR002*38\r\n"); /* Powers on the GNSS system */
   delay(250);
 
   /* Firmware version request */
+  if (nmea_handshake("$PAIR021*39\r\n", "$PAIR001,021", false))
+      return GNSS_MODULE_AG33;
+
+  // if failed, try one more time:
+  delay (250);
+  Serial_GNSS_Out.write("\r\n$PAIR002*38\r\n");
+  delay(250);
   return nmea_handshake("$PAIR021*39\r\n", "$PAIR001,021", false) ?
                         GNSS_MODULE_AG33 : GNSS_MODULE_NMEA;
 }
 
-extern gnss_chip_ops_t ag33_ops;
+extern const gnss_chip_ops_t ag33_ops;
 
 static bool ag33_setup()
 {
@@ -1587,7 +1595,7 @@ static void ag33_fini()
   delay(250);
 }
 
-/* const */ gnss_chip_ops_t ag33_ops = {
+const gnss_chip_ops_t ag33_ops = {
   ag33_probe,
   ag33_setup,
   ag33_loop,
@@ -1894,6 +1902,21 @@ byte GNSS_setup() {
   Serial.println(GNSS_name[gnss_id]);
 
   gnss_chip = (gnss_id == GNSS_MODULE_NMEA ? &generic_nmea_ops : gnss_chip);
+
+#if defined(ARDUINO_ARCH_NRF52)
+  // for models without a PPS connection, if missed identifying the chip type,
+  // switch to the real thing, to adjust the GGA & RMC timing assumptions
+  if (gnss_id == GNSS_MODULE_NMEA) {
+      if (hw_info.model == SOFTRF_MODEL_CARD) {
+          gnss_chip = &ag33_ops;
+          gnss_id = GNSS_MODULE_AG33;
+      } else if (hw_info.model == SOFTRF_MODEL_POCKET
+                 || hw_info.model == SOFTRF_MODEL_HANDHELD) {
+          gnss_chip = &at65_ops;
+          gnss_id = GNSS_MODULE_AT65;
+      }
+  }
+#endif
 
   if (gnss_chip) gnss_chip->setup();
 

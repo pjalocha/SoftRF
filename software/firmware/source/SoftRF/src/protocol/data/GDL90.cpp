@@ -310,6 +310,7 @@ static void *msgType10and20(container_t *aircraft)
     memcpy(aircraft->callsign + strlen(GDL90_CallSign_Prefix[aircraft->protocol]),
             str.c_str(), str.length());
     /* this callsign stays with aircraft until it expires */
+    NMEA_PFLAM(PFLAM_ACALL, aircraft, aircraft->callsign);
   }
 
   memcpy(Traffic.callsign, aircraft->callsign, sizeof(Traffic.callsign));

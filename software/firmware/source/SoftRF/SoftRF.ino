@@ -263,11 +263,11 @@ void setup()
   // do this before Baro_setup - Wire.begin() happens there
   hw_info.display = SoC->Display_setup();
 
-Serial.println(F("calling Baro_setup()..."));
+//Serial.println(F("calling Baro_setup()..."));
   // do this before Filesys_setup since this tickles pins 13,2
   if (! (settings->debug_flags & DEBUG_SIMULATE))
-      hw_info.baro = Baro_setup();
-Serial.println(F("... Baro_setup() returned"));
+      /* hw_info.baro = */  (void) Baro_setup();
+//Serial.println(F("... Baro_setup() returned"));
 
 //#if defined(USE_SD_CARD)
   //if (hw_info.model == SOFTRF_MODEL_PRIME_MK2) {
@@ -484,7 +484,7 @@ void normal()
 {
   static uint8_t firstfix = 1;
 
-  bool rx_tried   = false;
+  //bool rx_tried   = false;
   bool rx_success = false;
   bool tx_success = false;
 
@@ -678,10 +678,10 @@ Serial.println("Tentative GNSS fix");
     if ((settings->debug_flags & DEBUG_SIMULATE) == 0) {
 
       // check for newly received data, usually returns false
-      // >>> do this here (too?) to ensure no incoming packets are missed
-      rx_tried = true;
+      // >>> do this before tx to ensure no incoming packets are missed
+      //rx_tried = true;
       rx_success = RF_Receive();
-if (rx_success) which_rx_try = 1;
+
       // if received a packet, postpone transmission until next time around the loop().
 
       if (!rx_success && RF_Transmit_Ready(true)
@@ -876,7 +876,7 @@ void bridge()
     if (settings->nmea_p) {
       StdOut.print(F("$PSRFI,"));
       StdOut.print((unsigned long) now());    StdOut.print(F(","));
-      StdOut.print(Bin2Hex(fo_raw, rx_size)); StdOut.print(F(","));
+      StdOut.print(bytes2Hex(fo_raw, rx_size)); StdOut.print(F(","));
       StdOut.println(RF_last_rssi);
     }
 
@@ -908,7 +908,7 @@ void watchout()
     if (settings->nmea_p) {
       StdOut.print(F("$PSRFI,"));
       StdOut.print((unsigned long) now());    StdOut.print(F(","));
-      StdOut.print(Bin2Hex(fo_raw, rx_size)); StdOut.print(F(","));
+      StdOut.print(bytes2Hex(fo_raw, rx_size)); StdOut.print(F(","));
       StdOut.println(RF_last_rssi);
     }
   }

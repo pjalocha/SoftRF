@@ -186,9 +186,8 @@ static void EPD_Draw_Text()
 
       //snprintf(info_line, sizeof(info_line), "Traffic %d/%d", EPD_current, j);
       int rssi = traffic_by_dist[i].fop->rssi;
-      if (rssi < -99)   rssi = -99;
-      snprintf(info_line, sizeof(info_line), "%d/%d RSSI %d",
-          EPD_current, j, rssi);
+      snprintf(info_line, sizeof(info_line), "%d/%d RSSI%s%d",
+          EPD_current, j, (rssi < -99 ? "" : " "), rssi);
       display->getTextBounds(info_line, 0, 0, &tbx, &tby, &tbw, &tbh);
       y += tbh;
       display->setCursor(x, y);
