@@ -643,9 +643,13 @@ bool legacy_decode(void *buffer, container_t *this_aircraft, ufo_t *fop) {
     legacy_packet_t *pkt = (legacy_packet_t *) buffer;
 
     fop->addr = pkt->addr;
+    bool relayed = (pkt->addr_type > 3);
 
     if (fop->addr == settings->ignore_id)
         return false;                 /* ID told in settings to ignore */
+
+    if (fop->addr == ThisAircraft.addr && relayed)
+        return false;                 /* own packet relayed back to us */
 
     if (fop->addr == ThisAircraft.addr) {
         if (ground_status >= GROUND_STATUS_NEED_MED || ground_status == GROUND_STATUS_NEED_RIDE) {
@@ -676,7 +680,7 @@ bool legacy_decode(void *buffer, container_t *this_aircraft, ufo_t *fop) {
     fop->last_crc = RF_last_crc;
 
     fop->relayed = false;
-    if (pkt->addr_type > 3) {
+    if (relayed) {
         // probably air-relayed packet
         //   but do some sanity checks below
         fop->relayed = true;

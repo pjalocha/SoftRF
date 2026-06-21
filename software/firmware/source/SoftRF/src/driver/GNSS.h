@@ -86,5 +86,6 @@ extern bool gnss_new_time;
 extern bool gnss_time_from_rmc;
 extern uint32_t latest_Commit_Time;
 extern uint32_t GNSSTimeSyncMarker;
+extern uint8_t GNSS_sat_snr_db;
 
 #endif /* GNSSHELPER_H */

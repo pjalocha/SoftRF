@@ -135,9 +135,13 @@ bool adsl_decode(void *pkt, container_t *this_aircraft, ufo_t *fop) {
   fop->protocol  = RF_PROTOCOL_ADSL;
 
   fop->addr      = adsl_r.getAddress();
+  bool relayed = adsl_r.getRelay();
 
   if (fop->addr == settings->ignore_id)
       return false;                  /* ID told in settings to ignore */
+
+  if (fop->addr == ThisAircraft.addr && relayed)
+      return false;                  /* own packet relayed back to us */
 
   if (fop->addr == ThisAircraft.addr) {
       if (ground_status == GROUND_STATUS_NEED_RIDE
@@ -188,7 +192,7 @@ bool adsl_decode(void *pkt, container_t *this_aircraft, ufo_t *fop) {
 
   fop->stealth   = 0;
   fop->no_track  = 0;
-  fop->relayed   = adsl_r.getRelay();
+  fop->relayed   = relayed;
 
   return true;
 }

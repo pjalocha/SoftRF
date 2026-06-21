@@ -1392,6 +1392,40 @@ void NMEA_Export()
               millis(), (int)(voltage*100), SoC->getFreeHeap(),
               rx_packets_counter, tx_packets_counter, nacft, maxrssi);
       NMEAOutC(NMEA_OTHER);
+      snprintf_P(NMEABuffer, sizeof(NMEABuffer),
+              PSTR("$PSRFR,R,%lu,%lu,%lu,%lu,%lu,%lu,%lu*"),
+              (unsigned long) RF_rx_packets[RF_STAT_FLR],
+              (unsigned long) RF_rx_packets[RF_STAT_OGN],
+              (unsigned long) RF_rx_packets[RF_STAT_ADSL],
+              (unsigned long) RF_rx_packets[RF_STAT_RID],
+              (unsigned long) RF_rx_packets[RF_STAT_FNT],
+              (unsigned long) RF_rx_packets[RF_STAT_LDR],
+              (unsigned long) RF_rx_packets[RF_STAT_HDR]);
+      NMEAOutC(NMEA_OTHER);
+      snprintf_P(NMEABuffer, sizeof(NMEABuffer),
+              PSTR("$PSRFR,T,%lu,%lu,%lu,%lu,%lu,%lu,%lu*"),
+              (unsigned long) RF_tx_packets[RF_STAT_FLR],
+              (unsigned long) RF_tx_packets[RF_STAT_OGN],
+              (unsigned long) RF_tx_packets[RF_STAT_ADSL],
+              (unsigned long) RF_tx_packets[RF_STAT_RID],
+              (unsigned long) RF_tx_packets[RF_STAT_FNT],
+              (unsigned long) RF_tx_packets[RF_STAT_LDR],
+              (unsigned long) RF_tx_packets[RF_STAT_HDR]);
+      NMEAOutC(NMEA_OTHER);
+      snprintf_P(NMEABuffer, sizeof(NMEABuffer),
+              PSTR("$PSRFR,r,%u,%u,%u,%u,%u,%u,%u*"),
+              RF_rx_ppm[RF_STAT_FLR], RF_rx_ppm[RF_STAT_OGN],
+              RF_rx_ppm[RF_STAT_ADSL], RF_rx_ppm[RF_STAT_RID],
+              RF_rx_ppm[RF_STAT_FNT], RF_rx_ppm[RF_STAT_LDR],
+              RF_rx_ppm[RF_STAT_HDR]);
+      NMEAOutC(NMEA_OTHER);
+      snprintf_P(NMEABuffer, sizeof(NMEABuffer),
+              PSTR("$PSRFR,t,%u,%u,%u,%u,%u,%u,%u*"),
+              RF_tx_ppm[RF_STAT_FLR], RF_tx_ppm[RF_STAT_OGN],
+              RF_tx_ppm[RF_STAT_ADSL], RF_tx_ppm[RF_STAT_RID],
+              RF_tx_ppm[RF_STAT_FNT], RF_tx_ppm[RF_STAT_LDR],
+              RF_tx_ppm[RF_STAT_HDR]);
+      NMEAOutC(NMEA_OTHER);
       // also output an LK8EX1 sentence here if not sent from baro_loop()
       // - just to report the battery charge percentage
       // - LK8000 specs say to send percent instead of volts send as an integer, percent+1000

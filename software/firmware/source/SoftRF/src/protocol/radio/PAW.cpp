@@ -145,6 +145,7 @@ bool paw_decode(void *pkt, container_t *this_aircraft, ufo_t *fop)
     }
 
     ++rx_packets_counter;
+    RF_Count_Rx(RF_STAT_LDR);
 
     if (adsl_decode(pkt, this_aircraft, fop) == false)
         return false;

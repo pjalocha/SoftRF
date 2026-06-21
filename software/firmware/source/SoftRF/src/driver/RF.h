@@ -176,6 +176,28 @@ uint8_t RF_Payload_Size(uint8_t);
 bool    in_family(uint8_t protocol);
 const char *protocol_lbl(uint8_t main, uint8_t alt);
 
+enum {
+  RF_STAT_FLR      = 0,
+  RF_STAT_OGN      = 1,
+  RF_STAT_ADSL     = 2,
+  RF_STAT_RID      = 3,
+  RF_STAT_FNT      = 4,
+  RF_STAT_LDR      = 5,
+  RF_STAT_HDR      = 6,
+  RF_STAT_NONE     = 7,
+  RF_STAT_FLR_ADSL = 8,
+  RF_STAT_OGN_ADSL = 9,
+  RF_STAT_OTHER    = 10,
+  RF_STAT_COUNT
+};
+
+extern const char *RF_Stat_Label[RF_STAT_COUNT];
+extern uint32_t RF_rx_packets[RF_STAT_COUNT];
+extern uint32_t RF_tx_packets[RF_STAT_COUNT];
+extern uint16_t RF_rx_ppm[RF_STAT_COUNT];  // packets/minute over the last stats window
+extern uint16_t RF_tx_ppm[RF_STAT_COUNT];
+void    RF_Count_Rx(uint8_t stat);
+
 extern FreqPlan RF_FreqPlan;
 extern byte TxBuffer[MAX_PKT_SIZE], RxBuffer[MAX_PKT_SIZE];
 extern uint32_t TxTimeMarker;

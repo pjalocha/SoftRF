@@ -565,6 +565,163 @@ static void sx1262_setfreq(uint32_t);
 static uint8_t sx1262_receive(uint8_t *packet);
 static int16_t sx1262_transmit(uint8_t *packet, size_t length);
 static void sx1262_shutdown(void);
+
+struct sx1262_cache_t {
+  float bitrate;
+  float fdev;
+  float bandwidth;
+  uint16_t preamble;
+  int8_t output_power;
+  uint8_t sync_len;
+  uint8_t sync_word[8];
+  uint8_t encoding;
+  uint8_t packet_len;
+  uint8_t data_shaping;
+  uint8_t crc_len;
+  uint8_t crc_initial;
+  uint8_t rx_boosted;
+};
+
+static sx1262_cache_t sx1262_cache;
+
+static void sx1262_cache_clear()
+{
+  sx1262_cache.bitrate = -1.0f;
+  sx1262_cache.fdev = -1.0f;
+  sx1262_cache.bandwidth = -1.0f;
+  sx1262_cache.preamble = 0xFFFF;
+  sx1262_cache.output_power = -128;
+  sx1262_cache.sync_len = 0xFF;
+  sx1262_cache.encoding = 0xFF;
+  sx1262_cache.packet_len = 0xFF;
+  sx1262_cache.data_shaping = 0xFF;
+  sx1262_cache.crc_len = 0xFF;
+  sx1262_cache.crc_initial = 0xFF;
+  sx1262_cache.rx_boosted = 0xFF;
+}
+
+static int16_t sx1262_setBitRate_cached(float bitrate)
+{
+  if (sx1262_cache.bitrate == bitrate)
+      return RADIOLIB_ERR_NONE;
+  int16_t state = radio_sx1262->setBitRate(bitrate);
+  if (state == RADIOLIB_ERR_NONE)
+      sx1262_cache.bitrate = bitrate;
+  return state;
+}
+
+static int16_t sx1262_setFrequencyDeviation_cached(float fdev)
+{
+  if (sx1262_cache.fdev == fdev)
+      return RADIOLIB_ERR_NONE;
+  int16_t state = radio_sx1262->setFrequencyDeviation(fdev);
+  if (state == RADIOLIB_ERR_NONE)
+      sx1262_cache.fdev = fdev;
+  return state;
+}
+
+static int16_t sx1262_setRxBandwidth_cached(float bandwidth)
+{
+  if (sx1262_cache.bandwidth == bandwidth)
+      return RADIOLIB_ERR_NONE;
+  int16_t state = radio_sx1262->setRxBandwidth(bandwidth);
+  if (state == RADIOLIB_ERR_NONE)
+      sx1262_cache.bandwidth = bandwidth;
+  return state;
+}
+
+static int16_t sx1262_setPreambleLength_cached(uint16_t preamble)
+{
+  if (sx1262_cache.preamble == preamble)
+      return RADIOLIB_ERR_NONE;
+  int16_t state = radio_sx1262->setPreambleLength(preamble);
+  if (state == RADIOLIB_ERR_NONE)
+      sx1262_cache.preamble = preamble;
+  return state;
+}
+
+static int16_t sx1262_setOutputPower_cached(int8_t power)
+{
+  if (sx1262_cache.output_power == power)
+      return RADIOLIB_ERR_NONE;
+  int16_t state = radio_sx1262->setOutputPower(power);
+  if (state == RADIOLIB_ERR_NONE)
+      sx1262_cache.output_power = power;
+  return state;
+}
+
+static int16_t sx1262_setSyncWord_cached(uint8_t *syncword, size_t sync_len)
+{
+  if (sync_len <= sizeof(sx1262_cache.sync_word) &&
+      sx1262_cache.sync_len == sync_len &&
+      memcmp(sx1262_cache.sync_word, syncword, sync_len) == 0)
+      return RADIOLIB_ERR_NONE;
+
+  int16_t state = radio_sx1262->setSyncWord(syncword, sync_len);
+  if (state == RADIOLIB_ERR_NONE) {
+      if (sync_len <= sizeof(sx1262_cache.sync_word)) {
+          memcpy(sx1262_cache.sync_word, syncword, sync_len);
+          sx1262_cache.sync_len = sync_len;
+      } else {
+          sx1262_cache.sync_len = 0xFF;
+      }
+  }
+  return state;
+}
+
+static int16_t sx1262_setEncoding_cached(uint8_t encoding)
+{
+  if (sx1262_cache.encoding == encoding)
+      return RADIOLIB_ERR_NONE;
+  int16_t state = radio_sx1262->setEncoding(encoding);
+  if (state == RADIOLIB_ERR_NONE)
+      sx1262_cache.encoding = encoding;
+  return state;
+}
+
+static int16_t sx1262_fixedPacketLengthMode_cached(uint8_t packet_len)
+{
+  if (sx1262_cache.packet_len == packet_len)
+      return RADIOLIB_ERR_NONE;
+  int16_t state = radio_sx1262->fixedPacketLengthMode(packet_len);
+  if (state == RADIOLIB_ERR_NONE)
+      sx1262_cache.packet_len = packet_len;
+  return state;
+}
+
+static int16_t sx1262_setDataShaping_cached(uint8_t shaping)
+{
+  if (sx1262_cache.data_shaping == shaping)
+      return RADIOLIB_ERR_NONE;
+  int16_t state = radio_sx1262->setDataShaping(shaping);
+  if (state == RADIOLIB_ERR_NONE)
+      sx1262_cache.data_shaping = shaping;
+  return state;
+}
+
+static int16_t sx1262_setCRC_cached(uint8_t len, uint8_t initial)
+{
+  if (sx1262_cache.crc_len == len && sx1262_cache.crc_initial == initial)
+      return RADIOLIB_ERR_NONE;
+  int16_t state = radio_sx1262->setCRC(len, initial);
+  if (state == RADIOLIB_ERR_NONE) {
+      sx1262_cache.crc_len = len;
+      sx1262_cache.crc_initial = initial;
+  }
+  return state;
+}
+
+static int16_t sx1262_setRxBoostedGainMode_cached(bool enable, bool persist)
+{
+  uint8_t value = (enable ? 1 : 0) | (persist ? 2 : 0);
+  if (sx1262_cache.rx_boosted == value)
+      return RADIOLIB_ERR_NONE;
+  int16_t state = radio_sx1262->setRxBoostedGainMode(enable, persist);
+  if (state == RADIOLIB_ERR_NONE)
+      sx1262_cache.rx_boosted = value;
+  return state;
+}
+
 const rfchip_ops_t sx1262_ops = {
   RF_IC_SX1262,
   "SX126x",
@@ -578,6 +735,7 @@ const rfchip_ops_t sx1262_ops = {
 
 bool sx1262_probe()
 {
+  sx1262_cache_clear();
 #if 0
   switch (hw_info.model)
   {
@@ -596,6 +754,8 @@ bool sx1262_probe()
   radio_sx1262 = new SX1262(mod);
   float freq = 0.000001f * (float) RF_FreqPlan.getChanFrequency(0);
   int state = radio_sx1262->beginFSK(freq);
+  if (state == RADIOLIB_ERR_NONE)
+      sx1262_cache_clear();
   (void)radio_sx1262->setCRC(0,0);
   if (state == RADIOLIB_ERR_NONE) {
     //Serial.println(F("Found sx1262"));
@@ -679,7 +839,7 @@ Serial.println("Re-setting-up radio");
           syncword += rf_protocol->syncword_skip;
           syncword_size -= rf_protocol->syncword_skip;
       }
-      rl_state = radio_sx1262->setSyncWord(syncword, (size_t) syncword_size);
+      rl_state = sx1262_setSyncWord_cached(syncword, (size_t) syncword_size);
       //rl_state = radio_sx1262->fixedPacketLengthMode(pkt_size);
     }
     prev_tx = tx;
@@ -734,6 +894,8 @@ Serial.println("Re-setting-up radio");
     //use the "fast" version of begin() that skips the chip calibration:
     rl_state = radio_sx1262->begin(cur_freq, bw, (uint8_t)7, (uint8_t)5,
                    rf_protocol->syncword[0], tx_power, (uint16_t)8, Vtcxo, false, fast);
+    if (rl_state == RADIOLIB_ERR_NONE)
+        sx1262_cache_clear();
 //t1 = millis();
     //delay(1);
 #if RADIOLIB_DEBUG_BASIC
@@ -858,6 +1020,8 @@ Serial.println("Re-setting-up radio");
     //rl_state = radio_sx1262->beginFSK(cur_freq, br, fdev, bw, tx_power, preamble_size, Vtcxo, false);
     //use the "fast" version of begin() that skips the chip calibration:
     rl_state = radio_sx1262->beginFSK(cur_freq, br, fdev, bw, tx_power, preamble_size, Vtcxo, false, fast);
+    if (rl_state == RADIOLIB_ERR_NONE)
+        sx1262_cache_clear();
 //t1 = millis();
 #if RADIOLIB_DEBUG_BASIC
   if (rl_state == RADIOLIB_ERR_INVALID_BIT_RATE) {
@@ -880,11 +1044,11 @@ Serial.println("Re-setting-up radio");
         //rl_state = radio_sx1262->setFrequency(cur_freq);
 
         // may have switched to a different protocol within FSK, so set these:
-        rl_state = radio_sx1262->setBitRate(br);
-        rl_state = radio_sx1262->setFrequencyDeviation(fdev);
-        rl_state = radio_sx1262->setRxBandwidth(bw);
-        rl_state = radio_sx1262->setPreambleLength(preamble_size);
-        rl_state = radio_sx1262->setOutputPower(tx_power);  // may differ between protocols
+        rl_state = sx1262_setBitRate_cached(br);
+        rl_state = sx1262_setFrequencyDeviation_cached(fdev);
+        rl_state = sx1262_setRxBandwidth_cached(bw);
+        rl_state = sx1262_setPreambleLength_cached(preamble_size);
+        rl_state = sx1262_setOutputPower_cached(tx_power);  // may differ between protocols
 
     }   // end of if(prev_fsk)
 
@@ -904,23 +1068,23 @@ Serial.println("Re-setting-up radio");
                            syncword[0],
                            syncword[1]
                          };
-      rl_state = radio_sx1262->setSyncWord(sword,  (size_t) 4);
+      rl_state = sx1262_setSyncWord_cached(sword,  (size_t) 4);
     } else {
-      rl_state = radio_sx1262->setSyncWord((uint8_t *) syncword, (size_t) syncword_size);
+      rl_state = sx1262_setSyncWord_cached((uint8_t *) syncword, (size_t) syncword_size);
     }
 
-    rl_state = radio_sx1262->setEncoding((uint8_t) 0);   // NRZ - only software Manchester on sx1262
+    rl_state = sx1262_setEncoding_cached((uint8_t) 0);   // NRZ - only software Manchester on sx1262
    // rl_state = radio_sx1262->setEncoding(RADIOLIB_ENCODING_NRZ)
     //rl_state = radio_sx1262->setWhitening(false);   // equivalent
 
-    rl_state = radio_sx1262->fixedPacketLengthMode(pkt_size);
+    rl_state = sx1262_fixedPacketLengthMode_cached((uint8_t) pkt_size);
 
     if (rf_protocol->type == RF_PROTOCOL_P3I)
-        radio_sx1262->setDataShaping(RADIOLIB_SHAPING_1_0);
+        rl_state = sx1262_setDataShaping_cached(RADIOLIB_SHAPING_1_0);
     else // if (rf_protocol->type == RF_PROTOCOL_ADSL)
-        radio_sx1262->setDataShaping(RADIOLIB_SHAPING_0_5);
+        rl_state = sx1262_setDataShaping_cached(RADIOLIB_SHAPING_0_5);
 
-    rl_state = radio_sx1262->setCRC(0,0);  // CRC done in software
+    rl_state = sx1262_setCRC_cached(0, 0);  // CRC done in software
 
 //t2 = millis();
 //if (settings->debug_flags & DEBUG_DEEPER2)
@@ -933,7 +1097,7 @@ Serial.println("Re-setting-up radio");
 
   //rl_state = radio_sx1262->setRxBoostedGainMode(true,false);
   // >>> see if persist=true will improve rx sensitivity:
-  rl_state = radio_sx1262->setRxBoostedGainMode(true, true);
+  rl_state = sx1262_setRxBoostedGainMode_cached(true, true);
 #if RADIOLIB_DEBUG_BASIC
   if (rl_state != RADIOLIB_ERR_NONE)
     Serial.println(F("[sx1262] setRxBoostedGainMode() error!"));
@@ -1064,6 +1228,7 @@ static void sx1262_shutdown()
 {
   if (radio_sx1262)
     (void) radio_sx1262->sleep(false);
+  sx1262_cache_clear();
   RadioSPI.end();
 }
 

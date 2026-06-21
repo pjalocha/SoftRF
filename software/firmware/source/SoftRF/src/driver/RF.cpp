@@ -74,6 +74,25 @@ uint32_t tx_packets_counter = 0;
 uint32_t rx_packets_counter = 0;
 uint32_t adsb_packets_counter = 0;
 
+const char *RF_Stat_Label[RF_STAT_COUNT] = {
+  [RF_STAT_FLR]      = "FLR",
+  [RF_STAT_OGN]      = "OGN",
+  [RF_STAT_ADSL]     = "ADL",
+  [RF_STAT_RID]      = "RID",
+  [RF_STAT_FNT]      = "FNT",
+  [RF_STAT_LDR]      = "LDR",
+  [RF_STAT_HDR]      = "HDR",
+  [RF_STAT_NONE]     = "---",
+  [RF_STAT_FLR_ADSL] = "F+A",
+  [RF_STAT_OGN_ADSL] = "O+A",
+  [RF_STAT_OTHER]    = "OTH"
+};
+
+uint32_t RF_rx_packets[RF_STAT_COUNT] = {0};
+uint32_t RF_tx_packets[RF_STAT_COUNT] = {0};
+uint16_t RF_rx_ppm[RF_STAT_COUNT] = {0};
+uint16_t RF_tx_ppm[RF_STAT_COUNT] = {0};
+
 static uint32_t invalid_manchester_packets = 0;
 static uint8_t  invalid_manchester_counter = 0;
 
@@ -169,6 +188,98 @@ const rf_proto_desc_t  *altprotocol_ptr;
 
 static Slots_descr_t Time_Slots, *ts;
 static uint8_t       RF_timing = RF_TIMING_INTERVAL;
+
+static uint8_t RF_Stat_From_Protocol(const rf_proto_desc_t *proto, uint8_t protocol)
+{
+  if (proto == &uplink_proto_desc)
+      return RF_STAT_HDR;
+  if (proto == &paw_proto_desc || protocol == RF_PROTOCOL_P3I)
+      return RF_STAT_LDR;
+
+  switch (protocol)
+  {
+  case RF_PROTOCOL_LEGACY:
+  case RF_PROTOCOL_LATEST:
+    return RF_STAT_FLR;
+  case RF_PROTOCOL_OGNTP:
+    return RF_STAT_OGN;
+  case RF_PROTOCOL_ADSL:
+    return RF_STAT_ADSL;
+  case RF_PROTOCOL_FANET:
+    return RF_STAT_FNT;
+  case RF_PROTOCOL_NONE:
+    return RF_STAT_NONE;
+  default:
+    return RF_STAT_OTHER;
+  }
+}
+
+static uint8_t RF_Current_Rx_Stat()
+{
+  if (rx_flr_adsl)
+      return RF_Stat_From_Protocol(NULL, RF_last_protocol);
+  return RF_Stat_From_Protocol(curr_rx_protocol_ptr, current_RX_protocol);
+}
+
+static uint8_t RF_Current_Tx_Stat()
+{
+  return RF_Stat_From_Protocol(curr_tx_protocol_ptr, current_TX_protocol);
+}
+
+static void RF_Count_Tx(uint8_t stat)
+{
+  if (stat < RF_STAT_COUNT)
+      ++RF_tx_packets[stat];
+}
+
+void RF_Count_Rx(uint8_t stat)
+{
+  if (stat < RF_STAT_COUNT)
+      ++RF_rx_packets[stat];
+}
+
+static uint16_t RF_Rate_Ppm(uint32_t count, uint32_t prev_count, uint32_t window_ms)
+{
+  if (window_ms == 0)
+      return 0;
+  uint32_t ppm = ((count - prev_count) * 60000UL) / window_ms;
+  return (ppm > UINT16_MAX ? UINT16_MAX : (uint16_t) ppm);
+}
+
+static void RF_Update_Rates()
+{
+  static uint32_t last_ms = 0;
+  static uint32_t prev_rx[RF_STAT_COUNT] = {0};
+  static uint32_t prev_tx[RF_STAT_COUNT] = {0};
+
+  uint32_t now_ms = millis();
+  uint32_t elapsed = now_ms - last_ms;
+  if (last_ms != 0 && elapsed < 10000)
+      return;
+
+  if (last_ms == 0) {
+      last_ms = now_ms;
+      return;
+  }
+
+  for (uint8_t i = 0; i < RF_STAT_COUNT; i++) {
+      RF_rx_ppm[i] = RF_Rate_Ppm(RF_rx_packets[i], prev_rx[i], elapsed);
+      RF_tx_ppm[i] = RF_Rate_Ppm(RF_tx_packets[i], prev_tx[i], elapsed);
+      prev_rx[i] = RF_rx_packets[i];
+      prev_tx[i] = RF_tx_packets[i];
+  }
+  last_ms = now_ms;
+
+  Serial.printf("RF rate/min RX FLR:%u OGN:%u ADL:%u RID:%u FNT:%u LDR:%u HDR:%u | TX FLR:%u OGN:%u ADL:%u RID:%u FNT:%u LDR:%u HDR:%u\r\n",
+      RF_rx_ppm[RF_STAT_FLR],  RF_rx_ppm[RF_STAT_OGN],
+      RF_rx_ppm[RF_STAT_ADSL], RF_rx_ppm[RF_STAT_RID],
+      RF_rx_ppm[RF_STAT_FNT],  RF_rx_ppm[RF_STAT_LDR],
+      RF_rx_ppm[RF_STAT_HDR],
+      RF_tx_ppm[RF_STAT_FLR],  RF_tx_ppm[RF_STAT_OGN],
+      RF_tx_ppm[RF_STAT_ADSL], RF_tx_ppm[RF_STAT_RID],
+      RF_tx_ppm[RF_STAT_FNT],  RF_tx_ppm[RF_STAT_LDR],
+      RF_tx_ppm[RF_STAT_HDR]);
+}
 
 extern const gnss_chip_ops_t *gnss_chip;
 
@@ -661,8 +772,10 @@ Serial.printf("RX in prot %d, time slot %d, sec %d(%d) + %d ms, RSSI %d\r\n",
   if (success) {
       if (curr_rx_protocol_ptr->type == RF_PROTOCOL_ADSB_1090)
           ++adsb_packets_counter;
-      else if (curr_rx_protocol_ptr->type != RF_PROTOCOL_PAW)
+      else if (curr_rx_protocol_ptr->type != RF_PROTOCOL_PAW) {
           ++rx_packets_counter;
+          RF_Count_Rx(RF_Current_Rx_Stat());
+      }
       // else wait to see if ADSL decoding of the PAW payload will succeed
       return true;
   }
@@ -1483,6 +1596,8 @@ static void set_protocol_for_uplink()
 
 void RF_loop()
 {
+  RF_Update_Rates();
+
   if (!RF_ready) {
     if (RF_FreqPlan.Plan == RF_BAND_AUTO) {
         if (settings->band == RF_BAND_AUTO)
@@ -1819,8 +1934,10 @@ bool RF_Transmit(size_t size, bool wait)   // called with no-wait only for air-r
 
         if (settings->txpower != RF_TX_POWER_OFF) {
             RF_tx_size = transmit((uint8_t)size);
-            if (RF_tx_size)
+            if (RF_tx_size) {
                 tx_packets_counter++;
+                RF_Count_Tx(RF_Current_Tx_Stat());
+            }
 //else
 //Serial.println("... RF_tx_size=0");
 

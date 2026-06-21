@@ -33,6 +33,7 @@
 #include "WiFi.h"
 #include "RF.h"
 #include "Battery.h"
+#include "GPS_SatList.h"
 #include "../protocol/data/D1090.h"
 
 #if defined(USE_EGM96)
@@ -120,6 +121,8 @@ uint8_t GNSSbuf[250]; // at least 3 lines of 80 characters each
 
 int GNSS_cnt           = 0;
 uint16_t FW_Build_Year = 2000 + ((__DATE__[ 9]) - '0') * 10 + ((__DATE__[10]) - '0');
+static GPS_SatList GNSS_SatMon;
+uint8_t GNSS_sat_snr_db = 0;
 
 const char *GNSS_name[] = {
   [GNSS_MODULE_NONE]    = "NONE",
@@ -561,19 +564,17 @@ static void setup_UBX()
     Serial.println(F("WARNING: Unable to disable NMEA GLL."));
   }
 
-  bool enable = ((settings->nmea_g | settings->nmea2_g) & NMEA_G_GSA);
-  if (enable) {
-    GNSS_DEBUG_PRINTLN(F("Setting NMEA GSA: "));
-    msglen = makeUBXCFG(0x06, 0x01, sizeof(enaGSA), (enable ? enaGSA : disGSA));
-    sendUBX(GNSSbuf, msglen);
-    gnss_set_sucess = getUBX_ACK(0x06, 0x01);
-    if (!gnss_set_sucess) {
-      //GNSS_DEBUG_PRINTLN(F("WARNING: Unable to set NMEA GSA."));
-      Serial.println(F("WARNING: Unable to set NMEA GSA."));
-    } else {
-      Serial.print(F("Set GNSS NMEA GSA to "));
-      Serial.println(enable);
-    }
+  bool enable = true;
+  GNSS_DEBUG_PRINTLN(F("Setting NMEA GSA: "));
+  msglen = makeUBXCFG(0x06, 0x01, sizeof(enaGSA), enaGSA);
+  sendUBX(GNSSbuf, msglen);
+  gnss_set_sucess = getUBX_ACK(0x06, 0x01);
+  if (!gnss_set_sucess) {
+    //GNSS_DEBUG_PRINTLN(F("WARNING: Unable to set NMEA GSA."));
+    Serial.println(F("WARNING: Unable to set NMEA GSA."));
+  } else {
+    Serial.print(F("Set GNSS NMEA GSA to "));
+    Serial.println(enable);
   }
 
   enable = ((settings->nmea_g | settings->nmea2_g) & NMEA_G_GST);
@@ -591,19 +592,17 @@ static void setup_UBX()
     }
   }
 
-  enable = ((settings->nmea_g | settings->nmea2_g) & NMEA_G_GSV);
-  if (enable) {
-    GNSS_DEBUG_PRINTLN(F("Setting NMEA GSV: "));
-    msglen = makeUBXCFG(0x06, 0x01, sizeof(enaGSV), (enable ? enaGSV : disGSV));
-    sendUBX(GNSSbuf, msglen);
-    gnss_set_sucess = getUBX_ACK(0x06, 0x01);
-    if (!gnss_set_sucess) {
-      //GNSS_DEBUG_PRINTLN(F("WARNING: Unable to set NMEA GSV."));
-      Serial.println(F("WARNING: Unable to set NMEA GSV."));
-    } else {
-      Serial.print(F("Set GNSS NMEA GSV to "));
-      Serial.println(enable);
-    }
+  enable = true;
+  GNSS_DEBUG_PRINTLN(F("Setting NMEA GSV: "));
+  msglen = makeUBXCFG(0x06, 0x01, sizeof(enaGSV), enaGSV);
+  sendUBX(GNSSbuf, msglen);
+  gnss_set_sucess = getUBX_ACK(0x06, 0x01);
+  if (!gnss_set_sucess) {
+    //GNSS_DEBUG_PRINTLN(F("WARNING: Unable to set NMEA GSV."));
+    Serial.println(F("WARNING: Unable to set NMEA GSV."));
+  } else {
+    Serial.print(F("Set GNSS NMEA GSV to "));
+    Serial.println(enable);
   }
 
   GNSS_DEBUG_PRINTLN(F("Switching off NMEA VTG: "));
@@ -1309,10 +1308,8 @@ static bool goke_setup()
   goke_sendcmd("$PGKC239,1*3A\r\n");
 #endif
 
-  if ((settings->nmea_g | settings->nmea2_g) & NMEA_G_GSA)  /* RMC + GGA + GSA */
-    goke_sendcmd("$PGKC242,0,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0*36\r\n");
-  else   /* RMC + GGA */
-    goke_sendcmd("$PGKC242,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*37\r\n");
+  /* RMC + GGA + GSA + GSV */
+  goke_sendcmd("$PGKC242,0,1,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0*37\r\n");
 
   if (get_pps_pin() != SOC_UNUSED_PIN) {
     /* Enable 3D fix 1PPS output */
@@ -1402,15 +1399,9 @@ static bool at65_setup()
     //Serial_GNSS_Out.write("$PCAS04,7*1E\r\n"); /* GPS + GLONASS + BEIDOU */
   delay(250);
   Serial_GNSS_Out.write("$PCAS02,1000*2E\r\n");  /* set positioning frequency to 1Hz */
-  if ((settings->nmea_g | settings->nmea2_g) & NMEA_G_GSA) {
-    /* GGA,RMC and GSA */
-    Serial_GNSS_Out.write("$PCAS03,1,0,1,0,1,0,0,0,0,0,,,0,0*03\r\n");
-    delay(250);
-  } else {
-    /* GGA and RMC */
-    Serial_GNSS_Out.write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
-    delay(250);
-  }
+  /* GGA, GSA, GSV and RMC */
+  Serial_GNSS_Out.write("$PCAS03,1,0,1,1,1,0,0,0,0,0,,,0,0*02\r\n");
+  delay(250);
   Serial_GNSS_Out.write("$PCAS11,6*1B\r\n"); /* Aviation < 2g */
   delay(250);
 
@@ -1540,19 +1531,10 @@ static bool ag33_setup()
   Serial_GNSS_Out.write("$PAIR062,4,1*3B\r\n");   /* RMC 1s */  delay(250);
 
   Serial_GNSS_Out.write("$PAIR062,1,0*3F\r\n");   /* GLL OFF */ delay(250);
-  Serial_GNSS_Out.write("$PAIR062,3,0*3D\r\n");   /* GSV OFF */ delay(250);
+  Serial_GNSS_Out.write("$PAIR062,2,1*3D\r\n");   /* GSA 1s */  delay(250);
+  Serial_GNSS_Out.write("$PAIR062,3,5*38\r\n");   /* GSV 5s */  delay(250);
   Serial_GNSS_Out.write("$PAIR062,5,0*3B\r\n");   /* VTG OFF */ delay(250);
   Serial_GNSS_Out.write("$PAIR062,6,0*38\r\n");   /* ZDA OFF */ delay(250);
-#if defined(NMEA_TCP_SERVICE)
-  if (settings->nmea_out == NMEA_TCP ||       // SD
-      settings->nmea_out == NMEA_BLUETOOTH) { // SD
-    Serial_GNSS_Out.write("$PAIR062,2,1*3D\r\n"); /* GSA 1s */
-  }
-  else
-#endif /* NMEA_TCP_SERVICE */
-  {
-    Serial_GNSS_Out.write("$PAIR062,2,0*3C\r\n"); /* GSA OFF */
-  }
   delay(250);
 
   /*
@@ -2065,6 +2047,37 @@ int int2digits(const char *p)
     return (10*(p[0]-'0') + (p[1]-'0'));
 }
 
+static void GNSS_SatMon_Process(const char *sentence, size_t size)
+{
+    static uint32_t last_print_ms = 0;
+    NMEA_RxMsg nmea;
+
+    nmea.Clear();
+    for (size_t i = 0; i < size; i++)
+        nmea.ProcessByte(sentence[i]);
+    nmea.ProcessByte('\n');
+
+    if (!nmea.isComplete() || !nmea.isChecked())
+        return;
+
+    GNSS_SatMon.Process(nmea);
+
+    uint8_t average_snr;
+    if (GNSS_SatMon.CalcStats(average_snr) == 0) {
+        GNSS_sat_snr_db = 0;
+        return;
+    }
+    GNSS_sat_snr_db = (average_snr + 2) / 4;
+
+    if (millis() - last_print_ms < 10000)
+        return;
+
+    char line[160];
+    GNSS_SatMon.PrintStats(line);
+    Serial.println(line);
+    last_print_ms = millis();
+}
+
 static struct {
     uint32_t hms;
     uint32_t addr;
@@ -2176,10 +2189,17 @@ uint8_t Try_GNSS_sentence() {
 
     bool is_g = (gb[1]=='G');
     bool is_p = (gb[1]=='P');
-    if (!is_g && !is_p)
+    bool is_b = (gb[1]=='B');
+    if (!is_g && !is_p && !is_b)
         return 0;        // not a GNSS sentence
     if (gb[6] != ',')
         return 0;        // not $GPGGA, $GPRMC, etc
+
+    if (is_g || is_b)
+        GNSS_SatMon_Process(gb, write_size);
+
+    if (is_b)
+        return 1;        // $BDGSV was consumed by the satellite monitor
 
     if (is_p) {
 #if 0

@@ -35,14 +35,54 @@
 #include <Fonts/FreeSerifBold12pt7b.h>
 #include <Fonts/FreeMonoBold18pt7b.h>
 
-extern uint32_t tx_packets_counter, rx_packets_counter;
-
 static navbox_t navbox1;
 static navbox_t navbox2;
 static navbox_t navbox3;
 static navbox_t navbox4;
 static navbox_t navbox5;
 static navbox_t navbox6;
+static char sat_snr_text[10] = "0";
+static char rx_rate_text[10] = "0/min";
+static char tx_rate_text[10] = "0/min";
+
+static uint16_t EPD_packet_rate_ppm(const uint16_t *rate)
+{
+  uint32_t ppm = 0;
+
+  for (uint8_t stat = RF_STAT_FLR; stat <= RF_STAT_HDR; stat++)
+    ppm += rate[stat];
+  ppm += rate[RF_STAT_OTHER];
+
+  return ppm > 65535UL ? 65535 : (uint16_t) ppm;
+}
+
+static void EPD_format_packet_rate(char *buf, size_t size, uint16_t ppm)
+{
+  if (ppm < 120) {
+    snprintf(buf, size, "%u/min", ppm);
+  } else {
+    uint16_t pps10 = (ppm + 3) / 6;     // tenths of packets/s, rounded
+    snprintf(buf, size, "%u.%u/s", pps10 / 10, pps10 % 10);
+  }
+}
+
+static void EPD_print_box_value(uint16_t x, uint16_t y, uint16_t width,
+                                uint16_t baseline, const char *text)
+{
+  int16_t  tbx, tby;
+  uint16_t tbw, tbh;
+
+  display->setFont(&FreeMonoBold18pt7b);
+  display->getTextBounds(text, 0, 0, &tbx, &tby, &tbw, &tbh);
+
+  if (tbw > width - 10) {
+    display->setFont(&FreeSerifBold12pt7b);
+    display->getTextBounds(text, 0, 0, &tbx, &tby, &tbw, &tbh);
+  }
+
+  display->setCursor(x + (width > tbw ? (width - tbw) / 2 : 5), y + baseline);
+  display->print(text);
+}
 
 void EPD_status_setup()
 {
@@ -144,11 +184,9 @@ static void EPD_Draw_NavBoxes()
     else
         display->print(navbox2.title);
 
+    EPD_print_box_value(navbox1.x, navbox1.y, navbox1.width, 52, sat_snr_text);
+
     display->setFont(&FreeMonoBold18pt7b);
-
-    display->setCursor(navbox1.x + 25, navbox1.y + 52);
-    display->print(navbox1.value);
-
     display->setCursor(navbox2.x + 15, navbox2.y + 52);
     display->print((float) navbox2.value / 10, 1);
 
@@ -207,18 +245,16 @@ static void EPD_Draw_NavBoxes()
     display->setCursor(navbox6.x + 5, navbox6.y + 5 + tbh);
     display->print(navbox6.title);
 
-    display->setFont(&FreeMonoBold18pt7b);
+    EPD_print_box_value(navbox5.x, navbox5.y, navbox5.width, 50, rx_rate_text);
 
-    display->setCursor(navbox5.x + 25, navbox5.y + 50);
-    display->print(navbox5.value);
-
-    display->setCursor(navbox6.x + 25, navbox6.y + 50);
     if (settings->mode        == SOFTRF_MODE_RECEIVER ||
         settings->rf_protocol == RF_PROTOCOL_ADSB_UAT ||
         settings->txpower     == RF_TX_POWER_OFF) {
+      display->setFont(&FreeMonoBold18pt7b);
+      display->setCursor(navbox6.x + 25, navbox6.y + 50);
       display->print("OFF");
     } else {
-      display->print(navbox6.value);
+      EPD_print_box_value(navbox6.x, navbox6.y, navbox6.width, 50, tx_rate_text);
     }
 
 #if defined(USE_EPD_TASK)
@@ -237,13 +273,20 @@ void EPD_status_loop()
   if (isTimeToEPD()) {
 
     navbox1.value = gnss.satellites.value();
+    if (GNSS_sat_snr_db > 0)
+      snprintf(sat_snr_text, sizeof(sat_snr_text), "%ld/%udB",
+               (long) navbox1.value, (unsigned int) GNSS_sat_snr_db);
+    else
+      snprintf(sat_snr_text, sizeof(sat_snr_text), "%ld", (long) navbox1.value);
     navbox2.value = (int) (Battery_voltage() * 10.0);
     navbox3.value = Traffic_Count();
     int alarm_level = max_alarm_level;
     if (alarm_level > ALARM_LEVEL_NONE)  --alarm_level;   // make CLOSE=NONE, LOW=1 etc
     navbox4.value = alarm_level;
-    navbox5.value = rx_packets_counter % 1000;
-    navbox6.value = tx_packets_counter % 1000;
+    EPD_format_packet_rate(rx_rate_text, sizeof(rx_rate_text),
+                           EPD_packet_rate_ppm(RF_rx_ppm));
+    EPD_format_packet_rate(tx_rate_text, sizeof(tx_rate_text),
+                           EPD_packet_rate_ppm(RF_tx_ppm));
 
     EPD_Draw_NavBoxes();
 
