@@ -739,14 +739,11 @@ void Settings_defaults()
     ||  hw_info.model == SOFTRF_MODEL_HANDHELD)
     {
         settings->acft_type   = AIRCRAFT_TYPE_PARAGLIDER;
-        settings->rf_protocol = RF_PROTOCOL_FANET;
-        //settings->id_method = ADDR_TYPE_FANET;
-        settings->id_method   = ADDR_TYPE_FLARM;
     } else {
         settings->acft_type   = AIRCRAFT_TYPE_GLIDER;
-        settings->rf_protocol = RF_PROTOCOL_LATEST;
-        settings->id_method   = ADDR_TYPE_FLARM;
     }
+    settings->rf_protocol = RF_PROTOCOL_LATEST;
+    settings->id_method   = ADDR_TYPE_FLARM;
 
 #if defined(DEFAULT_REGION_US)
     settings->band        = RF_BAND_US;
@@ -886,8 +883,8 @@ void Settings_defaults()
     settings->auto_sos   = AUTO_SOS_OFF;
 
     settings->version = 0;        // SOFTRF_SETTINGS_VERSION will come from file
-    settings->altprotocol = RF_PROTOCOL_NONE;
-    settings->flr_adsl    = 0;
+    settings->altprotocol = RF_PROTOCOL_ADSL;
+    settings->flr_adsl    = 1;
     settings->rx1090x     = 100;
     settings->hrange      = 27;   // km
     settings->vrange      = 20;   // 2000m

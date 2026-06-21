@@ -28,11 +28,18 @@
 #define ADSL_SYNCWORD        {0x55, 0x99, 0x95, 0xA6, 0x9A, 0x65, 0xA9, 0x6A}
 #define ADSL_SYNCWORD_SIZE   8
 #define ADSL_SYNCWORD_SKIP   2     // ignore this many bytes when receiving
+
+#define UPLINK_SYNCWORD      {0x2D, 0xD4, 0x18}
+#define UPLINK_SYNCWORD_SIZE 3
+#define UPLINK_SYNCWORD_SKIP 0
+#define UPLINK_PREAMBLE_SIZE 16
+
 #define ADSL_PAYLOAD_SIZE    21
 #define ADSL_CRC_TYPE        RF_CHECKSUM_TYPE_CRC_MODES
 #define ADSL_CRC_SIZE        3
 
 #define ADSL_AIR_TIME        6 /* in ms */
+#define UPLINK_AIR_TIME      2 /* in ms */
 
 #define ADSL_TX_INTERVAL_MIN 600 /* in ms */
 #define ADSL_TX_INTERVAL_MAX 1400
@@ -46,6 +53,7 @@ typedef struct {
 } adsl_packet_t;
 
 extern const rf_proto_desc_t adsl_proto_desc;
+extern const rf_proto_desc_t uplink_proto_desc;
 
 bool adsl_decode(void *, container_t *, ufo_t *);
 size_t adsl_encode(void *, container_t *);

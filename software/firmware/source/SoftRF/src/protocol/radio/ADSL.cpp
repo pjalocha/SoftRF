@@ -71,6 +71,36 @@ const rf_proto_desc_t adsl_proto_desc = {
   .slot1           = {800, 1200}
 };
 
+const rf_proto_desc_t uplink_proto_desc = {
+  .name            = {'U','P','L','I','N','K', 0},
+  .type            = RF_PROTOCOL_ADSL,
+  .modulation_type = RF_MODULATION_TYPE_2FSK,
+  .preamble_type   = RF_PREAMBLE_TYPE_AA,
+  .preamble_size   = UPLINK_PREAMBLE_SIZE,
+  .syncword        = UPLINK_SYNCWORD,
+  .syncword_size   = UPLINK_SYNCWORD_SIZE,
+  .syncword_skip   = UPLINK_SYNCWORD_SKIP,
+  .net_id          = 0x0000,
+  .payload_type    = RF_PAYLOAD_DIRECT,
+  .payload_size    = ADSL_PAYLOAD_SIZE + ADSL_CRC_SIZE,
+  .payload_offset  = 0,
+  .crc_type        = ADSL_CRC_TYPE,
+  .crc_size        = 0,
+
+  .bitrate         = RF_BITRATE_200KBPS,
+  .deviation       = RF_FREQUENCY_DEVIATION_50KHZ,
+  .whitening       = RF_WHITENING_NONE,
+  .bandwidth       = RF_RX_BANDWIDTH_SS_250KHZ,
+
+  .air_time        = UPLINK_AIR_TIME,
+
+  .tm_type         = RF_TIMING_2SLOTS_PPS_SYNC,
+  .tx_interval_min = ADSL_TX_INTERVAL_MIN,
+  .tx_interval_max = ADSL_TX_INTERVAL_MAX,
+  .slot0           = {200, 450},
+  .slot1           = {0, 0}
+};
+
 GPS_Position pos;
 ADSL_Packet  adsl_r __attribute__((aligned(sizeof(uint32_t)))); /* Rx */
 ADSL_Packet  adsl_t __attribute__((aligned(sizeof(uint32_t)))); /* Tx */

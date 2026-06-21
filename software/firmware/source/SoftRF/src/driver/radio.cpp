@@ -278,6 +278,9 @@ cur_freq, bw, rf_protocol->syncword[0], tx_power);
 
     switch (rf_protocol->bitrate)
     {
+    case RF_BITRATE_200KBPS:
+      br = 200.0f;
+      break;
     case RF_BITRATE_38400:
       br = 38.4f;
       break;
@@ -305,6 +308,9 @@ cur_freq, bw, rf_protocol->syncword[0], tx_power);
 
     switch (rf_protocol->bandwidth)
     {
+    case RF_RX_BANDWIDTH_SS_250KHZ:
+      bw = 250.0f;
+      break;
     case RF_RX_BANDWIDTH_SS_125KHZ:
       //bw = 250.0f;   // was 234.3f;
       bw = 125.0f;     // the RadioLib sx1276 code seems to take it single-sided
@@ -781,6 +787,9 @@ Serial.println("Re-setting-up radio");
 
     switch (rf_protocol->bitrate)
     {
+    case RF_BITRATE_200KBPS:
+      br = 200.0f;
+      break;
     case RF_BITRATE_38400:
       br = 38.4f;
       break;
@@ -808,6 +817,9 @@ Serial.println("Re-setting-up radio");
 
     switch (rf_protocol->bandwidth)
     {
+    case RF_RX_BANDWIDTH_SS_250KHZ:
+      bw = 234.3f;
+      break;
     case RF_RX_BANDWIDTH_SS_125KHZ:
       bw = 234.3f;       // the RadioLib sx1262 code seems to take it double-sided
       break;
@@ -1458,6 +1470,9 @@ Serial.println(RF_FreqPlan.Protocol);
 
     switch (rf_protocol->bitrate)
     {
+    case RF_BITRATE_200KBPS:
+      br = 200.0f;
+      break;
     case RF_BITRATE_38400:
       br = high ? 125.0f :  38.4f;
       break;
@@ -1488,6 +1503,9 @@ Serial.println(RF_FreqPlan.Protocol);
 
     switch (rf_protocol->bandwidth)
     {
+    case RF_RX_BANDWIDTH_SS_250KHZ:
+      bw = 234.3f;
+      break;
     case RF_RX_BANDWIDTH_SS_125KHZ:
       bw = 234.3f;    // the RadioLib LR1110 code seems to take it double-sided
       break;
@@ -2058,6 +2076,9 @@ static int16_t lr20xx_setup(const rf_proto_desc_t *rf_protocol, bool tx)
 
     switch (rf_protocol->bitrate)
     {
+    case RF_BITRATE_200KBPS:
+      br = 200.0f;
+      break;
     case RF_BITRATE_100KBPS:
       br = high ? 125.0f : 100.0f; /* SX128x minimum is 125 kbps */
       break;
@@ -2123,6 +2144,9 @@ static int16_t lr20xx_setup(const rf_proto_desc_t *rf_protocol, bool tx)
 
     switch (rf_protocol->bandwidth)
     {
+    case RF_RX_BANDWIDTH_SS_250KHZ:
+      bw = 555.6f;
+      break;
     case RF_RX_BANDWIDTH_SS_125KHZ:
       bw = 307.7f;
       break;

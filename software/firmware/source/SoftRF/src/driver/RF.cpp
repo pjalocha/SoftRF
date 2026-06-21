@@ -57,6 +57,14 @@ uint32_t RF_OK_until  = 0;
 uint32_t TxTimeMarker = 0;
 uint32_t TxTimeMarker2 = 0;
 uint32_t TxEndMarker  = 0;
+
+static const uint16_t FLARM_SLOT0_BEGIN_MS = 450;
+static const uint16_t FLARM_SLOT0_END_MS   = 825;
+static const uint16_t FLARM_SLOT1_BEGIN_MS = 825;
+static const uint16_t FLARM_SLOT1_END_MS   = 1200;
+static const uint16_t UPLINK_BEGIN_MS      = 200;
+static const uint16_t UPLINK_END_MS        = FLARM_SLOT0_BEGIN_MS;
+static const uint16_t RF_SLOT_TX_GUARD_MS  = 5;
 byte TxBuffer[MAX_PKT_SIZE] __attribute__((aligned(sizeof(uint32_t))));
 
 uint8_t RL_txPacket[RADIOLIB_MAX_DATA_LENGTH];
@@ -1355,6 +1363,21 @@ void set_protocol_for_slot()
 */
 }
 
+static void set_protocol_for_uplink()
+{
+  curr_rx_protocol_ptr = &uplink_proto_desc;
+  curr_tx_protocol_ptr = &uplink_proto_desc;
+  protocol_decode = &adsl_decode;
+  protocol_encode = &adsl_encode;
+  current_RX_protocol = RF_PROTOCOL_ADSL;
+  current_TX_protocol = RF_PROTOCOL_ADSL;
+  rx_flr_adsl = false;
+
+  RF_FreqPlan.setPlan((uint8_t) settings->band, (uint8_t) RF_PROTOCOL_P3I);
+  calc_txpower();
+  set_channel(0);
+}
+
 void RF_loop()
 {
   if (!RF_ready) {
@@ -1411,7 +1434,7 @@ void RF_loop()
   }
 
   uint32_t slot_base_ms = ref_time_ms;
-  if (ms_since_pps < 300) {  /* does not happen often? */
+  if (ms_since_pps < UPLINK_BEGIN_MS) {  /* does not happen often? */
     /* channel does _NOT_ change at PPS rollover in middle of slot 1 */
     /* - therefore change the reference second to the previous one: */
     --RF_time;
@@ -1421,39 +1444,53 @@ void RF_loop()
 
   bool sec_15 = ((RF_time & 0x0F) == 0x0F);
 
-  if (ms_since_pps >= 380 && ms_since_pps < 800) {
+  if (ms_since_pps >= UPLINK_BEGIN_MS && ms_since_pps < UPLINK_END_MS) {
+
+    RF_current_slot = 2;
+    set_protocol_for_uplink();
+    RF_OK_from  = slot_base_ms + UPLINK_BEGIN_MS;
+    RF_OK_until = slot_base_ms + UPLINK_END_MS;
+    TxEndMarker = slot_base_ms + UPLINK_END_MS - RF_SLOT_TX_GUARD_MS;
+    TxTimeMarker = slot_base_ms + UPLINK_BEGIN_MS + RF_SLOT_TX_GUARD_MS +
+                   SoC->random(0, (UPLINK_END_MS - UPLINK_BEGIN_MS -
+                                    2 * RF_SLOT_TX_GUARD_MS));
+
+  } else if (ms_since_pps >= FLARM_SLOT0_BEGIN_MS && ms_since_pps < FLARM_SLOT0_END_MS) {
 
     RF_current_slot = 0;
     set_protocol_for_slot();
-    RF_OK_from  = slot_base_ms + 405;
-    RF_OK_until = slot_base_ms + 800;
-    TxEndMarker = slot_base_ms + 795;
+    RF_OK_from  = slot_base_ms + FLARM_SLOT0_BEGIN_MS;
+    RF_OK_until = slot_base_ms + FLARM_SLOT0_END_MS;
+    TxEndMarker = slot_base_ms + FLARM_SLOT0_END_MS - RF_SLOT_TX_GUARD_MS;
     if (relay_next) {
         TxTimeMarker = TxEndMarker;     // prevent transmission (relay bypasses this)
         relay_next = false;
     } else if (current_TX_protocol == RF_PROTOCOL_ADSB_1090) {
         TxTimeMarker = TxEndMarker;     // prevent transmission
-    } else if (current_TX_protocol == RF_PROTOCOL_ADSL) {  // ADS-L slot starts at 450
-        TxTimeMarker = slot_base_ms + 455 + SoC->random(0, 335);
+    } else if (current_TX_protocol == RF_PROTOCOL_ADSL) {
+        TxTimeMarker = slot_base_ms + FLARM_SLOT0_BEGIN_MS + RF_SLOT_TX_GUARD_MS +
+                       SoC->random(0, (FLARM_SLOT0_END_MS - FLARM_SLOT0_BEGIN_MS -
+                                        2 * RF_SLOT_TX_GUARD_MS));
     } else if (current_TX_protocol == RF_PROTOCOL_FANET) {
         TxTimeMarker = RF_OK_until;
     } else if (current_TX_protocol == RF_PROTOCOL_P3I) {
         TxTimeMarker = RF_OK_until;
     } else {
-        TxTimeMarker = slot_base_ms + 405 + SoC->random(0, 385);
+        TxTimeMarker = slot_base_ms + FLARM_SLOT0_BEGIN_MS +
+                       SoC->random(0, (FLARM_SLOT0_END_MS - FLARM_SLOT0_BEGIN_MS));
     }
 
-  } else if (ms_since_pps >= 800 && ms_since_pps < 1300) {
+  } else if (ms_since_pps >= FLARM_SLOT1_BEGIN_MS && ms_since_pps < FLARM_SLOT1_END_MS) {
 
     RF_current_slot = 1;
     set_protocol_for_slot();
     /* channel does _NOT_ change at PPS rollover in middle of slot 1 */
-    RF_OK_from  = slot_base_ms + 805;
-    RF_OK_until = slot_base_ms + 1380;
+    RF_OK_from  = slot_base_ms + FLARM_SLOT1_BEGIN_MS;
+    RF_OK_until = slot_base_ms + FLARM_SLOT1_END_MS;
     if (current_TX_protocol == RF_PROTOCOL_FANET
      || current_TX_protocol == RF_PROTOCOL_P3I) {
         TxTimeMarker = RF_OK_until;          /* in Slot 1 transmit only in FANET/P3I */
-        TxEndMarker = slot_base_ms + 1370;
+        TxEndMarker = slot_base_ms + FLARM_SLOT1_END_MS - RF_SLOT_TX_GUARD_MS;
         if (TxTimeMarker2 == 0) {   // tx happened in previous Slot 1
             uint32_t interval;
             if (dual_protocol == RF_FLR_FANET)
@@ -1482,21 +1519,24 @@ void RF_loop()
         // Some other receivers may mis-decrypt packets sent after the next PPS
         // so limit the transmissions to the pre-PPS half of the slot.
         TxEndMarker = slot_base_ms + 995;
-        //TxTimeMarker = slot_base_ms + 805 + SoC->random(0, 185);
-        TxTimeMarker = slot_base_ms + 805 + SoC->random(0, 385);
+        TxTimeMarker = slot_base_ms + FLARM_SLOT1_BEGIN_MS +
+                       SoC->random(0, (FLARM_SLOT1_END_MS - FLARM_SLOT1_BEGIN_MS));
         if (TxTimeMarker > TxEndMarker)     // in 50% of the cases no tx in slot 1 in sec 15:
             TxTimeMarker = TxEndMarker;     // prevent transmission (relay bypasses this)
     } else {   // Legacy, OGNTP
-        TxEndMarker = slot_base_ms + 1195;
-        TxTimeMarker = slot_base_ms + 805 + SoC->random(0, 385);
+        TxEndMarker = slot_base_ms + FLARM_SLOT1_END_MS - RF_SLOT_TX_GUARD_MS;
+        TxTimeMarker = slot_base_ms + FLARM_SLOT1_BEGIN_MS +
+                       SoC->random(0, (FLARM_SLOT1_END_MS - FLARM_SLOT1_BEGIN_MS));
     }
 
-  } else { /* now 300-380 ms and somehow have not set up Slot 1 */
+  } else { /* outside the active FLARM slots */
 
 //Serial.println("<380 ms and somehow...");
     RF_current_slot = 1;
     set_protocol_for_slot();
-    RF_OK_until = slot_base_ms + 380;
+    RF_OK_until = slot_base_ms + UPLINK_BEGIN_MS;
+    if (ms_since_pps >= FLARM_SLOT1_END_MS)
+        RF_OK_until += 1000;
     RF_OK_from   = RF_OK_until;
     TxTimeMarker = RF_OK_until;          /* do not transmit for now */
     TxEndMarker  = RF_OK_until;
@@ -1632,7 +1672,8 @@ bool RF_Transmit(size_t size, bool wait)   // called with no-wait only for air-r
 
       if (RF_Transmit_Ready(wait)) {
 
-        if (current_TX_protocol == RF_PROTOCOL_ADSL) {
+        if (current_TX_protocol == RF_PROTOCOL_ADSL
+         && curr_tx_protocol_ptr != &uplink_proto_desc) {
             // for relaying in ADS-L instead of normal protocol
             curr_tx_protocol_ptr = &adsl_proto_desc;
         }
