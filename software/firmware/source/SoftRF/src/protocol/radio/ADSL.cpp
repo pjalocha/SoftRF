@@ -226,7 +226,8 @@ size_t adsl_encode(void *pkt, container_t *aircraft) {
       adsl_t.setRelay(1);
   } else {
       // if not airborne, transmit only once in 8 seconds
-      if (ThisAircraft.airborne == 0 && ThisAircraft.timestamp < ThisAircraft.positiontime + 8 && (! test_mode)) {
+      if (!RF_Transmit_After_Receive() &&
+          ThisAircraft.airborne == 0 && ThisAircraft.timestamp < ThisAircraft.positiontime + 8 && (! test_mode)) {
           RF_Transmit_Postpone();
           return 0;
       }

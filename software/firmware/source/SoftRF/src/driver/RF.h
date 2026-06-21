@@ -166,6 +166,7 @@ void    RF_SetChannel(void);
 void    RF_loop(void);
 bool    RF_Transmit_Happened();
 bool    RF_Transmit_Ready(bool wait);
+bool    RF_Transmit_After_Receive(void);
 void    RF_Transmit_Postpone(void);
 size_t  RF_Encode(container_t *cip, bool wait);
 bool    RF_Transmit(size_t size, bool wait);

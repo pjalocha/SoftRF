@@ -694,8 +694,8 @@ Serial.println("Tentative GNSS fix");
 
       // if received a packet, postpone transmission until next time around the loop().
 
-      if (!rx_success && RF_Transmit_Ready(true)
-          && (relay_waiting == NULL || RF_current_slot == 0)
+      if ((RF_Transmit_After_Receive() || !rx_success) && RF_Transmit_Ready(true)
+          && (relay_waiting == NULL || RF_current_slot == 0 || RF_current_slot == 2)
           && settings->relay < RELAY_ONLY) {
           // Don't bother with the encode() if can't transmit right now
           size_t s = RF_Encode(&ThisAircraft, true);  // returns 0 if implausible data

@@ -936,6 +936,58 @@ RF_FreqPlan.Plan, RF_FreqPlan.Protocol, prev_protocol, channel, frequency);
   }
 }
 
+static uint8_t adsl_hop_bitrev(uint8_t byte)
+{
+  byte = ((byte & 0b00111000) >> 3) | ((byte & 0b00000111) << 3);
+  byte = ((byte & 0b00100100) >> 2) | ((byte & 0b00001001) << 2) |
+         (byte & 0b00010010);
+  return byte;
+}
+
+static uint8_t adsl_hop_scramble(uint8_t sec)
+{
+  sec = adsl_hop_bitrev(sec);
+  return (sec < 60 ? sec : sec - 60);
+}
+
+static uint8_t adsl_hop_channel(uint8_t sec, int32_t altitude)
+{
+  if (altitude < 0)
+      altitude = 0;
+  if (sec >= 60)
+      sec -= 60;
+
+  uint8_t hop_phase = (altitude / 100) % 60;
+  uint8_t ch_sec = adsl_hop_scramble(sec) + hop_phase;
+  if (ch_sec >= 60)
+      ch_sec -= 60;
+
+  uint8_t chan = ch_sec / 15;
+  return chan ^ (chan >> 1);
+}
+
+static bool use_abh_adsl_slots()
+{
+  return settings->rf_protocol == RF_PROTOCOL_LATEST
+      && settings->altprotocol == RF_PROTOCOL_ADSL
+      && (settings->band == RF_BAND_AUTO
+       || settings->band == RF_BAND_EU
+       || settings->band == RF_BAND_UK);
+}
+
+static bool abh_ldr_tx_slot_selected(uint32_t second, uint8_t slot)
+{
+  static uint32_t selected_second = 0;
+  static uint8_t selected_slot = 0;
+
+  if (selected_second != second) {
+      selected_second = second;
+      selected_slot = SoC->random(0, 2);
+  }
+
+  return slot == selected_slot;
+}
+
 byte RF_setup(void)
 {
   // resurrected the option of auto-band:
@@ -1174,6 +1226,57 @@ void RF_SetChannel(void)
 void set_protocol_for_slot()
 {
   const rf_proto_desc_t  *prev_rx_protocol_ptr = curr_rx_protocol_ptr;
+
+  if (use_abh_adsl_slots()) {
+    uint8_t abh_chan = adsl_hop_channel(RF_time % 60, (int32_t) ThisAircraft.altitude);
+
+    if (abh_chan >= 2) {
+        curr_rx_protocol_ptr = &paw_proto_desc;
+        curr_tx_protocol_ptr = &paw_proto_desc;
+        protocol_decode = &paw_decode;
+        protocol_encode = &paw_encode;
+        current_RX_protocol = RF_PROTOCOL_P3I;
+        current_TX_protocol = RF_PROTOCOL_P3I;
+        rx_flr_adsl = false;
+        RF_FreqPlan.setPlan((uint8_t) settings->band, (uint8_t) RF_PROTOCOL_P3I);
+        calc_txpower();
+        RF_current_chan = 0;
+        set_channel(RF_current_chan);
+    } else {
+        RF_FreqPlan.setPlan((uint8_t) settings->band, (uint8_t) RF_PROTOCOL_LATEST);
+        uint8_t flarm_chan = RF_FreqPlan.getChannel((time_t) RF_time, RF_current_slot, 0);
+
+        if (abh_chan == flarm_chan) {
+            if (settings->flr_adsl) {
+                curr_rx_protocol_ptr = &flr_adsl_proto_desc;
+                protocol_decode = &flr_adsl_decode;
+            } else {
+                curr_rx_protocol_ptr = &latest_proto_desc;
+                protocol_decode = &legacy_decode;
+            }
+            curr_tx_protocol_ptr = &latest_proto_desc;
+            protocol_encode = &legacy_encode;
+            current_RX_protocol = curr_rx_protocol_ptr->type;
+            current_TX_protocol = RF_PROTOCOL_LATEST;
+            rx_flr_adsl = (curr_rx_protocol_ptr == &flr_adsl_proto_desc);
+        } else {
+            curr_rx_protocol_ptr = &adsl_proto_desc;
+            curr_tx_protocol_ptr = &adsl_proto_desc;
+            protocol_decode = &adsl_decode;
+            protocol_encode = &adsl_encode;
+            current_RX_protocol = RF_PROTOCOL_ADSL;
+            current_TX_protocol = RF_PROTOCOL_ADSL;
+            rx_flr_adsl = false;
+            RF_FreqPlan.setPlan((uint8_t) settings->band, (uint8_t) RF_PROTOCOL_ADSL);
+        }
+
+        calc_txpower();
+        RF_current_chan = abh_chan;
+        set_channel(RF_current_chan);
+    }
+
+    return;
+  }
 
   // Transmit one packet in alt protocol once every 4 seconds:
   // In time Slot 0 for ADS-L & FLR, and in Slot 1 for OGNTP.
@@ -1462,7 +1565,18 @@ void RF_loop()
     RF_OK_from  = slot_base_ms + FLARM_SLOT0_BEGIN_MS;
     RF_OK_until = slot_base_ms + FLARM_SLOT0_END_MS;
     TxEndMarker = slot_base_ms + FLARM_SLOT0_END_MS - RF_SLOT_TX_GUARD_MS;
-    if (relay_next) {
+    bool abh_slot = use_abh_adsl_slots();
+    if (abh_slot) {
+        TxEndMarker = slot_base_ms + FLARM_SLOT0_END_MS - RF_SLOT_TX_GUARD_MS;
+        if (current_TX_protocol == RF_PROTOCOL_P3I &&
+            !abh_ldr_tx_slot_selected(RF_time, RF_current_slot)) {
+            TxTimeMarker = TxEndMarker;
+        } else {
+            TxTimeMarker = slot_base_ms + FLARM_SLOT0_BEGIN_MS + RF_SLOT_TX_GUARD_MS +
+                           SoC->random(0, (FLARM_SLOT0_END_MS - FLARM_SLOT0_BEGIN_MS -
+                                            2 * RF_SLOT_TX_GUARD_MS));
+        }
+    } else if (relay_next) {
         TxTimeMarker = TxEndMarker;     // prevent transmission (relay bypasses this)
         relay_next = false;
     } else if (current_TX_protocol == RF_PROTOCOL_ADSB_1090) {
@@ -1487,7 +1601,18 @@ void RF_loop()
     /* channel does _NOT_ change at PPS rollover in middle of slot 1 */
     RF_OK_from  = slot_base_ms + FLARM_SLOT1_BEGIN_MS;
     RF_OK_until = slot_base_ms + FLARM_SLOT1_END_MS;
-    if (current_TX_protocol == RF_PROTOCOL_FANET
+    bool abh_slot = use_abh_adsl_slots();
+    if (abh_slot) {
+        TxEndMarker = slot_base_ms + FLARM_SLOT1_END_MS - RF_SLOT_TX_GUARD_MS;
+        if (current_TX_protocol == RF_PROTOCOL_P3I &&
+            !abh_ldr_tx_slot_selected(RF_time, RF_current_slot)) {
+            TxTimeMarker = TxEndMarker;
+        } else {
+            TxTimeMarker = slot_base_ms + FLARM_SLOT1_BEGIN_MS + RF_SLOT_TX_GUARD_MS +
+                           SoC->random(0, (FLARM_SLOT1_END_MS - FLARM_SLOT1_BEGIN_MS -
+                                            2 * RF_SLOT_TX_GUARD_MS));
+        }
+    } else if (current_TX_protocol == RF_PROTOCOL_FANET
      || current_TX_protocol == RF_PROTOCOL_P3I) {
         TxTimeMarker = RF_OK_until;          /* in Slot 1 transmit only in FANET/P3I */
         TxEndMarker = slot_base_ms + FLARM_SLOT1_END_MS - RF_SLOT_TX_GUARD_MS;
@@ -1560,7 +1685,8 @@ void RF_loop()
 */
 if (settings->debug_flags & DEBUG_DEEPER) {
 int rxprot = (rx_flr_adsl? 0xD : current_RX_protocol);
-uint32_t txtime = ((current_TX_protocol==RF_PROTOCOL_FANET || current_TX_protocol==RF_PROTOCOL_P3I)?
+uint32_t txtime = ((current_TX_protocol==RF_PROTOCOL_FANET ||
+                   (current_TX_protocol==RF_PROTOCOL_P3I && !use_abh_adsl_slots()))?
                         TxTimeMarker2 : TxTimeMarker);
 Serial.printf("Prot %X/%d, Slot %d set for sec %d at PPS+%d ms, PPS %d, tx ok %d - %d, gd to %d\r\n",
 rxprot, current_TX_protocol, RF_current_slot, (RF_time & 0x0F),
@@ -1572,7 +1698,8 @@ bool RF_Transmit_Happened()
 {
     if (/* dual_protocol == RF_FLR_FANET && */ current_TX_protocol == RF_PROTOCOL_FANET)
         return (TxTimeMarker2 == 0);
-    if (/* dual_protocol == RF_FLR_P3I && */ current_TX_protocol == RF_PROTOCOL_P3I)
+    if (/* dual_protocol == RF_FLR_P3I && */ current_TX_protocol == RF_PROTOCOL_P3I
+     && !use_abh_adsl_slots())
         return (TxTimeMarker2 == 0);
     //if (! TxEndMarker)
     //    return (TxTimeMarker > millis());   // for protocols handled by the original code
@@ -1585,11 +1712,17 @@ bool RF_Transmit_Ready(bool wait)
     //    return false;
     uint32_t now_ms = millis();
     if ((/* dual_protocol == RF_FLR_FANET && */ current_TX_protocol == RF_PROTOCOL_FANET)
-    ||  (/* dual_protocol == RF_FLR_P3I   && */ current_TX_protocol == RF_PROTOCOL_P3I))
+    ||  (/* dual_protocol == RF_FLR_P3I   && */ current_TX_protocol == RF_PROTOCOL_P3I
+         && !use_abh_adsl_slots()))
         return (TxTimeMarker2 != 0 && now_ms > TxTimeMarker2 && now_ms < TxEndMarker);
     //if (! TxEndMarker)                     // for protocols handled by the original code
     //    return (now_ms > TxTimeMarker);
     return (now_ms >= (wait? TxTimeMarker : RF_OK_from) && now_ms < TxEndMarker);
+}
+
+bool RF_Transmit_After_Receive()
+{
+    return RF_current_slot == 2 || use_abh_adsl_slots();
 }
 
 // postpone transmission by one time slot
@@ -1700,7 +1833,7 @@ Serial.printf("TX in protocol %d at %d ms, size=%d, RF_tx_size=%d\r\n",
         }
 
         if (current_TX_protocol == RF_PROTOCOL_FANET
-         || current_TX_protocol == RF_PROTOCOL_P3I)
+         || (current_TX_protocol == RF_PROTOCOL_P3I && !use_abh_adsl_slots()))
             TxTimeMarker2 = 0;
         else
             TxTimeMarker = RF_OK_until;

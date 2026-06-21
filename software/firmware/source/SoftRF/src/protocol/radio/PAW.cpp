@@ -161,7 +161,8 @@ bool paw_decode(void *pkt, container_t *this_aircraft, ufo_t *fop)
 size_t paw_encode(void *pkt, container_t *aircraft) {
 
   // if not airborne, transmit only once in 8 seconds
-  if (ThisAircraft.airborne == 0 && ThisAircraft.timestamp < ThisAircraft.positiontime + 8 && (! test_mode)) {
+  if (!RF_Transmit_After_Receive() &&
+      ThisAircraft.airborne == 0 && ThisAircraft.timestamp < ThisAircraft.positiontime + 8 && (! test_mode)) {
       RF_Transmit_Postpone();
       return 0;              // otherwise adsl_encode() will return 0
   }
