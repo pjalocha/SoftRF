@@ -436,7 +436,9 @@ struct rst_info {
 #define USE_OLED
 #define EXCLUDE_OLED_049
 //#define EXCLUDE_OLED_BARO_PAGE
+#if !defined(EXCLUDE_TFT)
 #define USE_TFT
+#endif
 
 #define USE_NMEA_CFG
 #define USE_BASICMAC
@@ -488,7 +490,9 @@ struct rst_info {
 #endif /* USE_USB_HOST */
 #endif /* CONFIG_IDF_TARGET_ESP32S2 */
 
+#if !defined(EXCLUDE_SD_CARD)
 #define USE_SD_CARD
+#endif
 
 #define POWER_SAVING_WIFI_TIMEOUT 600000UL /* 10 minutes */
 

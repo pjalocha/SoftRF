@@ -883,7 +883,7 @@ void NMEA_Outs(uint16_t nmeatype, const char *buf, unsigned int size, bool nl)
     if (out2)
         NMEA_Out(settings->nmea_out2, buf, size, nl);
 
-#if defined(ESP32)   // only on SD card
+#if defined(ESP32) && defined(USE_SD_CARD)   // only on SD card
     if ((out1 || out2) && NMEALogOpen) {
         if (NMEALog.write((const uint8_t *) buf, size) < size) {
             NMEALog.close();
@@ -1032,7 +1032,7 @@ void NMEA_bridge_buf(char c, char* buf, int& n)
 
 void NMEA_loop()
 {
-#if defined(ESP32)
+#if defined(ESP32) && defined(USE_SD_CARD)
   // open NMEA log file only after there is a GNSS fix
   // - to be able to embed the date into the file name
   if (next_SD_sync==0 && isValidGNSSFix()) {

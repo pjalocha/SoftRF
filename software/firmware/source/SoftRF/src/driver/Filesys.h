@@ -38,12 +38,21 @@ extern File TARGETfile;
 extern bool SIMfileOpen;
 extern bool TARGETfileOpen;
 
+#else
+static inline void SD_log(const char *message) { (void) message; }
+static inline void closeSDlog() {}
+
 #endif // USE_SD_CARD
 
 #define FILESYS SPIFFS
 #define FS_is_mounted SPIFFS_is_mounted
+#if defined(USE_SD_CARD)
 #define IGCFILESYS SD
 #define IGCFS_is_mounted SD_is_mounted
+#else
+#define IGCFILESYS SPIFFS
+#define IGCFS_is_mounted SPIFFS_is_mounted
+#endif
 
 #endif // ESP32
 

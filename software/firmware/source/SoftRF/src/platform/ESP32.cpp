@@ -43,6 +43,9 @@ bool SPIFFS_is_mounted = false;
 #include <rom/spi_flash.h>
 #include <soc/adc_channel.h>
 #include <flashchips.h>
+#if ARDUINO_USB_CDC_ON_BOOT && (defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
+#include <USB.h>
+#endif
 
 //#include <axp20x.h>
 //#define  XPOWERS_CHIP_AXP2102
@@ -195,10 +198,12 @@ char UDPpacketBuffer[UDP_PACKET_BUFSIZE];
 #include "../driver/EPD.h"
 #include "uCDB.hpp"
 
+#if defined(USE_SD_CARD)
 SPIClass uSD_SPI(HSPI);
 SdFat    uSD(&uSD_SPI);
 
 static bool uSD_is_mounted = false;
+#endif
 bool button_pressed = false;
 
 Adafruit_FlashTransport_ESP32 HWFlashTransport;
@@ -252,8 +257,10 @@ ui_settings_t ui_settings;
     .team         = 0
 }; */
 
+#if !defined(ui)
 ui_settings_t *ui;
-uCDB<FatFileSystem, File> ucdb(fatfs);
+#endif
+uCDB<FatVolume, File32> ucdb(fatfs);
 
 #if CONFIG_TINYUSB_MSC_ENABLED
 #if defined(USE_ADAFRUIT_MSC)
@@ -297,7 +304,8 @@ static int32_t ESP32_msc_read_cb (uint32_t lba, uint32_t offset, void* buffer, u
 {
   // Note: SPIFLash Bock API: readBlocks/writeBlocks/syncBlocks
   // already include 4K sector caching internally. We don't need to cache it, yahhhh!!
-  return SPIFlash->readBlocks(lba, offset, (uint8_t*) buffer, bufsize/512) ?
+  (void) offset;
+  return SPIFlash->readBlocks(lba, (uint8_t*) buffer, bufsize/512) ?
          bufsize : -1;
 }
 
@@ -308,7 +316,8 @@ static int32_t ESP32_msc_write_cb (uint32_t lba, uint32_t offset, uint8_t* buffe
 {
   // Note: SPIFLash Bock API: readBlocks/writeBlocks/syncBlocks
   // already include 4K sector caching internally. We don't need to cache it, yahhhh!!
-  int32_t rval = SPIFlash->writeBlocks(lba, offset, buffer, bufsize/512) ?
+  (void) offset;
+  int32_t rval = SPIFlash->writeBlocks(lba, buffer, bufsize/512) ?
                  bufsize : -1;
 
 #if 1
@@ -350,7 +359,7 @@ static uint32_t ESP32_getFlashId()
   return g_rom_flashchip.device_id;
 }
 
-#if defined(CORE_DEBUG_LEVEL) && CORE_DEBUG_LEVEL>0 && !defined(TAG)
+#if !defined(TAG)
 #define TAG "MAC"
 #endif
 
@@ -808,37 +817,33 @@ static void ESP32_setup()
       /* inactivate tinyUF2 LED output setting */
       pinMode(SOC_GPIO_PIN_S3_GNSS_PPS, INPUT);
 
-      // Set the minimum common working voltage of the PMU VBUS input,
-      // below this value will turn off the PMU
-      PMU->setVbusVoltageLimit(XPOWERS_AXP2101_VBUS_VOL_LIM_4V36);
-
       // Set the maximum current of the PMU VBUS input,
       // higher than this value will turn off the PMU
       PMU->setVbusCurrentLimit(XPOWERS_AXP2101_VBUS_CUR_LIM_1500MA);
 
       // DCDC1 1500~3400mV, IMAX=2A
-      PMU->setDC1Voltage(3300);
+      PMU->setPowerChannelVoltage(XPOWERS_DCDC1, 3300);
 
       // DCDC5 1400~3700mV, 100mV/step, 24 steps, IMAX=1A
-      PMU->setDC5Voltage(3700);
+      PMU->setPowerChannelVoltage(XPOWERS_DCDC5, 3700);
 
       // ALDO 500~3500V, 100mV/step, IMAX=300mA
-      PMU->setALDO3Voltage(3300); // LoRa, AXP2101 power-on value: 3300
-      PMU->setALDO4Voltage(3300); // GNSS, AXP2101 power-on value: 2900
+      PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300); // LoRa, AXP2101 power-on value: 3300
+      PMU->setPowerChannelVoltage(XPOWERS_ALDO4, 3300); // GNSS, AXP2101 power-on value: 2900
 
-      PMU->setALDO2Voltage(3300); // RTC
-      PMU->setALDO1Voltage(3300); // sensors, OLED
-      PMU->setBLDO1Voltage(3300); // uSD
+      PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300); // RTC
+      PMU->setPowerChannelVoltage(XPOWERS_ALDO1, 3300); // sensors, OLED
+      PMU->setPowerChannelVoltage(XPOWERS_BLDO1, 3300); // uSD
 
       // PMU->enableDC1();
-      PMU->enableDC5();
+      PMU->enablePowerOutput(XPOWERS_DCDC5);
 
-      PMU->enableALDO3();
-      PMU->enableALDO4();
+      PMU->enablePowerOutput(XPOWERS_ALDO3);
+      PMU->enablePowerOutput(XPOWERS_ALDO4);
 
-      PMU->enableALDO2();
-      PMU->enableALDO1();
-      PMU->enableBLDO1();
+      PMU->enablePowerOutput(XPOWERS_ALDO2);
+      PMU->enablePowerOutput(XPOWERS_ALDO1);
+      PMU->enablePowerOutput(XPOWERS_BLDO1);
 
       PMU->setChargingLedMode(XPOWERS_CHG_LED_ON);
 
@@ -875,16 +880,16 @@ static void ESP32_setup()
 
 #if 0
       Wire.begin(SOC_GPIO_PIN_S3_SDA, SOC_GPIO_PIN_S3_SCL);
-      Wire.beginTransmission(QMC6310_SLAVE_ADDRESS);
+      Wire.beginTransmission(QMC6310U_SLAVE_ADDRESS);
       if (Wire.endTransmission() == 0) {
-        hw_info.mag = MAG_QMC6310;
+        hw_info.mag = MAG_QMC6310U;
       }
       WIRE_FINI(Wire);
 #else
-      bool has_qmc = mag.begin(Wire, QMC6310_SLAVE_ADDRESS,
+      bool has_qmc = mag.begin(Wire, QMC6310U_SLAVE_ADDRESS,
                                SOC_GPIO_PIN_S3_SDA, SOC_GPIO_PIN_S3_SCL);
-      mag.deinit(); WIRE_FINI(Wire);
-      hw_info.mag  = has_qmc ? MAG_QMC6310 : hw_info.mag;
+      WIRE_FINI(Wire);
+      hw_info.mag  = has_qmc ? MAG_QMC6310U : hw_info.mag;
 #endif
 
 #if !defined(EXCLUDE_IMU)
@@ -1063,6 +1068,7 @@ static void ESP32_setup()
       }
     }
 
+#if defined(USE_SD_CARD)
     int uSD_SS_pin = (esp32_board == ESP32_S3_DEVKIT) ?
                      SOC_GPIO_PIN_S3_SD_SS_DK : SOC_GPIO_PIN_S3_SD_SS_TBEAM;
 
@@ -1081,8 +1087,11 @@ static void ESP32_setup()
       hw_info.storage = (hw_info.storage == STORAGE_FLASH) ?
                         STORAGE_FLASH_AND_CARD : STORAGE_CARD;
     }
+#endif
 
+#if !defined(ui)
     ui = &ui_settings;
+#endif
 #endif /* CONFIG_IDF_TARGET_ESP32S3 */
   }
 
@@ -1170,11 +1179,13 @@ static void ESP32_post_init()
 
     Serial.println();
     Serial.println(F("External components:"));
+#if defined(USE_SD_CARD)
     Serial.print(F("CARD    : "));
     Serial.println(hw_info.storage == STORAGE_CARD ||
                    hw_info.storage == STORAGE_FLASH_AND_CARD
                                                        ? F("PASS") : F("N/A"));
     Serial.flush();
+#endif
 
     Serial.println();
     Serial.println(F("Power-on Self Test is complete."));
@@ -1183,6 +1194,7 @@ static void ESP32_post_init()
 
   Serial.println();
 
+#if defined(USE_SD_CARD)
   if (!uSD_is_mounted) {
     Serial.println(F("WARNING: unable to mount micro-SD card."));
   } else {
@@ -1213,6 +1225,7 @@ static void ESP32_post_init()
       uSD.fsBegin();
     }
   }
+#endif
 
 #else /* not CONFIG_IDF_TARGET_ESP32S3 */
 
@@ -2247,7 +2260,9 @@ static byte ESP32_Display_setup()
         rval = DISPLAY_OLED_1_3;
       }
 
-    } else if (hw_info.model == SOFTRF_MODEL_PRIME_MK2) {
+    }
+#if !defined(CONFIG_IDF_TARGET_ESP32S3)
+    else if (hw_info.model == SOFTRF_MODEL_PRIME_MK2) {
 
         // Start up Wire here rather than in ESP32_setup since we need to look at settings
         // OLED probe (here) and Baro probe try both wires
@@ -2288,6 +2303,7 @@ static byte ESP32_Display_setup()
         }
 
     }  // end if (PRIME_MK2)
+#endif /* CONFIG_IDF_TARGET_ESP32S3 */
 
     if (u8x8) {
       u8x8->begin();

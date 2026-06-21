@@ -261,7 +261,7 @@ void FlightLog_setup()
 #if defined(ESP32)
     if (hw_info.model == SOFTRF_MODEL_PRIME_MK2) {
 #if defined(USE_SD_CARD)
-        if (SD_is_mounted == false)
+        if (IGCFS_is_mounted == false)
 #endif
         {
             // log to PSRAM instead
@@ -784,7 +784,7 @@ void makeFlightLogName()
     compfilename[12] = 'Z';   // .IGZ means compressed
 #if defined(ESP32)
     const char *fn = (PSRAMbuf? compfilename : filename.c_str());
-    while (PSRAMbuf? SPIFFS.exists(fn) : SD.exists(fn))
+    while (PSRAMbuf? SPIFFS.exists(fn) : IGCFILESYS.exists(fn))
 #else
     const char *fn = (settings->compflash? compfilename : filename.c_str());
     while (IGCFILESYS.exists(filename.c_str()) || IGCFILESYS.exists(compfilename))
@@ -803,7 +803,7 @@ void makeFlightLogName()
             if (PSRAMbuf)
                 SPIFFS.remove(fn);
             else
-                SD.remove(fn);
+                IGCFILESYS.remove(fn);
 #else
             IGCFILESYS.remove(filename.c_str());  // delete compressed
             IGCFILESYS.remove(compfilename);      // delete uncompressed
@@ -1246,7 +1246,7 @@ const char *FlightLogStatus()
             return "No log yet";
     } else {
 #if defined(USE_SD_CARD)
-        if (SD_is_mounted) {
+        if (IGCFS_is_mounted) {
             if (FlightLogPosition)
                 return buf;
             else if (FlightLogOpen)
@@ -1347,7 +1347,7 @@ void MD5_test()
     if (! (settings->debug_flags & DEBUG_SIMULATE))  return;
     if (FlightLogFail)  return;
 #if defined(ESP32)
-    if (SD_is_mounted == false)  return;
+    if (IGCFS_is_mounted == false)  return;
 #endif
     //MD5::make_hash(md5_a, "abcdefghijklmnopqrstuvwxyz");
     //Serial.println("MD5 should be:   c3fcd3d76192e4007dfb496cca67e13b");

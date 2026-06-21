@@ -452,8 +452,10 @@ static size_t ESP32_Bluetooth_write(const uint8_t *buffer, size_t size)
 
 static void ESP32_Bluetooth_flushTXD()
 {
+#if !defined(CONFIG_IDF_TARGET_ESP32S3)
     if (SerialBT)
         SerialBT.flush();
+#endif /* CONFIG_IDF_TARGET_ESP32S3 */
 }
 
 IODev_ops_t ESP32_Bluetooth_ops = {

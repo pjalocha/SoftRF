@@ -39,5 +39,9 @@ bool word2wav(const char *word);
 int read_wav_byte(uint8_t &data);
 
 #endif /* ESP32 */
+#else
+void Voice_fini(void);
+static inline void clear_waves(void) {}
+static inline int parse_wav_tar(void) { return 0; }
 #endif /* EXCLUDE_VOICE */
 #endif /* VOICEHELPER_H */

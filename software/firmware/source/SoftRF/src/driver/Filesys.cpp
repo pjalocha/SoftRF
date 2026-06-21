@@ -46,7 +46,11 @@ bool SD_is_mounted = false;    // even if not using SD card can check this
 #include "OLED.h"
 #include "../protocol/data/IGC.h"
 
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+SPIClass SD_VSPI = SPIClass(FSPI);  // for the SD card sharing the bus with LORA
+#else
 SPIClass SD_VSPI = SPIClass(VSPI);  // for the SD card sharing the bus with LORA
+#endif
 SPIClass SD_HSPI = SPIClass(HSPI);  // for a separate SPI bus for the SD card
 
 static uint8_t ss_pin;
@@ -279,6 +283,15 @@ uint32_t IGCFS_free_kb()
   //uint32_t free_kb = SD.freeClusterCount();      // clusters
   //free_kb *= (SD.blocksPerCluster() >> 1);       // kbytes
   //return free_kb;
+}
+
+#else
+
+void Filesys_setup() {}
+
+uint32_t IGCFS_free_kb()
+{
+  return FILESYS_free_kb();
 }
 
 #endif // USE_SD_CARD

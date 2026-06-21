@@ -216,9 +216,17 @@ void setup()
     Serial.end();
     delay(1500);
     if (settings->altpin0)
+#if ARDUINO_USB_CDC_ON_BOOT && (defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
+      Serial.begin(SerialBaud);
+#else
       Serial.begin(SerialBaud, SERIAL_OUT_BITS, settings->altpin0);
+#endif
     else
+#if ARDUINO_USB_CDC_ON_BOOT && (defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
+      Serial.begin(SerialBaud);
+#else
       Serial.begin(SerialBaud, SERIAL_OUT_BITS);
+#endif
   }
   Serial.setRxBufferSize(SerialBufSize);
 #else
@@ -433,7 +441,9 @@ void shutparts()
   SoC->swSer_enableRx(false);
   Buzzer_fini();
 #if defined(ESP32)
+#if !defined(EXCLUDE_VOICE)
   Voice_fini();
+#endif
   Strobe_fini();
   Web_fini();
   NMEA_fini();
