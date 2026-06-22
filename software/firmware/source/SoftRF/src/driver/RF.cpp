@@ -25,6 +25,8 @@
 #include <SPI.h>
 #endif /* ARDUINO */
 
+#include <string.h>
+
 #include <RadioLib.h>
 
 #include "RF.h"
@@ -104,7 +106,14 @@ uint8_t RF_last_rx_len = 0;          // for variable-length FANET packets
 uint8_t current_RX_protocol;
 uint8_t current_TX_protocol;
 uint8_t dual_protocol = RF_SINGLE_PROTOCOL;
-bool rx_flr_adsl = false;
+
+enum {
+  RF_RX_COMBINED_NONE,
+  RF_RX_COMBINED_FLR_ADSL,
+  RF_RX_COMBINED_OGN_ADSL
+};
+
+static uint8_t rx_combined = RF_RX_COMBINED_NONE;
 
 FreqPlan RF_FreqPlan;
 static bool RF_ready = false;
@@ -217,7 +226,7 @@ static uint8_t RF_Stat_From_Protocol(const rf_proto_desc_t *proto, uint8_t proto
 
 static uint8_t RF_Current_Rx_Stat()
 {
-  if (rx_flr_adsl)
+  if (rx_combined != RF_RX_COMBINED_NONE)
       return RF_Stat_From_Protocol(NULL, RF_last_protocol);
   return RF_Stat_From_Protocol(curr_rx_protocol_ptr, current_RX_protocol);
 }
@@ -448,6 +457,106 @@ uint16_t manchester_decoded(uint8_t *buf)
 
 #define REJECT_INVALID_MANCHESTER 1
 
+static uint8_t RF_Count_Bits(uint8_t value)
+{
+    uint8_t count = 0;
+    while (value) {
+        value &= value - 1;
+        ++count;
+    }
+    return count;
+}
+
+static uint8_t RF_Diff_Bits(const uint8_t *data, const uint8_t *sign,
+                            const uint8_t *mask, uint8_t len)
+{
+    uint8_t diff = 0;
+    for (uint8_t i = 0; i < len; ++i)
+        diff += RF_Count_Bits((data[i] ^ sign[i]) & mask[i]);
+    return diff;
+}
+
+static uint8_t RF_Bit_Shift_Left(uint8_t *data, uint8_t bytes, uint8_t bits)
+{
+    uint8_t byte_offset = bits >> 3;
+    uint8_t bit_offset  = bits & 0x07;
+
+    if (bytes <= byte_offset)
+        return 0;
+
+    bytes -= byte_offset;
+    if (bit_offset == 0) {
+        memmove(data, data + byte_offset, bytes);
+        return bytes;
+    }
+
+    if (bytes <= 1)
+        return 0;
+
+    uint8_t out_bytes = bytes - 1;
+    for (uint8_t i = 0; i < out_bytes; ++i) {
+        uint8_t msb = data[byte_offset + i];
+        uint8_t lsb = data[byte_offset + i + 1];
+        data[i] = (msb << bit_offset) | (lsb >> (8 - bit_offset));
+    }
+    return out_bytes;
+}
+
+static bool RF_Decode_Ogn_Adsl_Rx(uint8_t raw_size, uint8_t *size,
+                                  unsigned *crc_type)
+{
+    static const uint8_t ADSL_SIGN[3] = {0x24, 0xB1, 0x80};
+    static const uint8_t ADSL_MASK[3] = {0xFF, 0xFF, 0xF0};
+    static const uint8_t OGN_SIGN[3]  = {0x9B, 0x2B, 0x60};
+    static const uint8_t OGN_MASK[3]  = {0xFF, 0xFF, 0xF8};
+
+    uint8_t decoded_size = raw_size >> 1;
+    if (decoded_size > sizeof(RxBuffer))
+        decoded_size = sizeof(RxBuffer);
+
+    invalid_manchester_counter = 0;
+    uint8_t *p = RL_rxPacket;
+    for (uint8_t i = 0; i < decoded_size; ++i) {
+        uint16_t val = manchester_decoded(p);
+#if REJECT_INVALID_MANCHESTER
+        if (invalid_manchester_counter > 1) {
+            ++invalid_manchester_packets;
+            return false;
+        }
+#endif
+        RxBuffer[i] = (val & 0xFF);
+        p += 2;
+    }
+
+#if !REJECT_INVALID_MANCHESTER
+    if (invalid_manchester_counter != 0)
+        ++invalid_manchester_packets;
+#endif
+
+    uint8_t shift = 0;
+    uint8_t expected_size = 0;
+    if (RF_Diff_Bits(RxBuffer, ADSL_SIGN, ADSL_MASK, sizeof(ADSL_SIGN)) <= 1) {
+        RF_last_protocol = RF_PROTOCOL_ADSL;
+        *crc_type = RF_CHECKSUM_TYPE_CRC_MODES;
+        shift = 20;
+        expected_size = ADSL_PAYLOAD_SIZE + ADSL_CRC_SIZE;
+    } else if (RF_Diff_Bits(RxBuffer, OGN_SIGN, OGN_MASK, sizeof(OGN_SIGN)) <= 1) {
+        RF_last_protocol = RF_PROTOCOL_OGNTP;
+        *crc_type = RF_CHECKSUM_TYPE_GALLAGER;
+        shift = 21;
+        expected_size = OGNTP_PAYLOAD_SIZE + OGNTP_CRC_SIZE;
+    } else {
+        RF_last_protocol = RF_PROTOCOL_NONE;
+        return false;
+    }
+
+    *size = RF_Bit_Shift_Left(RxBuffer, decoded_size, shift);
+    if (*size > expected_size)
+        *size = expected_size;
+
+    return (*size == expected_size);
+}
+
 static bool receive()
 {
   bool sw_manchester = (curr_rx_protocol_ptr->whitening == RF_WHITENING_MANCHESTER
@@ -492,8 +601,18 @@ Serial.println(bytes2Hex((byte *)RL_rxPacket, size));
 #endif
 
   unsigned crc_type = curr_rx_protocol_ptr->crc_type;
+  bool decoded_combined = false;
 //  if (curr_rx_protocol_ptr == &flr_adsl_proto_desc)
-  if (rx_flr_adsl) {
+  if (rx_combined == RF_RX_COMBINED_OGN_ADSL) {
+    if (sw_manchester) {
+      if (!RF_Decode_Ogn_Adsl_Rx(size, &size, &crc_type))
+          return 0;
+      decoded_combined = true;
+    } else {
+      RF_last_protocol = RF_PROTOCOL_NONE;
+      return 0;
+    }
+  } else if (rx_combined == RF_RX_COMBINED_FLR_ADSL) {
     if (sw_manchester) {
       // examine 2 later bytes in the sync word to identify the protocol
       // - that is 4 bytes before Manchester decoding
@@ -536,7 +655,7 @@ byte1, byte2, FLR_ID_BYTE_1, FLR_ID_BYTE_2);
     }
   }
 
-  if (sw_manchester)
+  if (!decoded_combined && sw_manchester)
     size >>= 1;
 
   if (size > sizeof(RxBuffer))
@@ -548,11 +667,13 @@ byte1, byte2, FLR_ID_BYTE_1, FLR_ID_BYTE_2);
 
   u1_t offset = curr_rx_protocol_ptr->payload_offset;    // only nonzero for PAW
 
-  if (sw_manchester) {
+  if (decoded_combined) {
+    // RxBuffer already contains a classified and bit-aligned ADS-L or OGN packet.
+  } else if (sw_manchester) {
 
     invalid_manchester_counter = 0;
 
-    if (rx_flr_adsl) {
+    if (rx_combined == RF_RX_COMBINED_FLR_ADSL) {
       // skip the unused sync bytes
       size -= 3;
       // shift the payload bits as needed
@@ -601,7 +722,7 @@ Serial.println("invalid Manchester");
 #endif
 
   } else {  // Manchester hardware or no Manchester
-    if (rx_flr_adsl) {
+    if (rx_combined == RF_RX_COMBINED_FLR_ADSL) {
       // skip the unused sync bytes
       size -= 3;
       // shift the payload bits as needed
@@ -764,7 +885,7 @@ Serial.println("PAW external CRC8 wrong");
 #if 1
 if (success && settings->debug_flags) {
 uint8_t protocol = curr_rx_protocol_ptr->type;
-if (rx_flr_adsl)  protocol = RF_last_protocol;
+if (rx_combined != RF_RX_COMBINED_NONE)  protocol = RF_last_protocol;
 Serial.printf("RX in prot %d, time slot %d, sec %d(%d) + %d ms, RSSI %d\r\n",
     protocol, RF_current_slot, RF_time, (RF_time & 0x0F), millis()-ref_time_ms, RF_last_rssi);
 }
@@ -1355,7 +1476,7 @@ void set_protocol_for_slot()
     curr_rx_protocol_ptr = &fanet_proto_desc;
     protocol_decode = &fanet_decode;
     current_RX_protocol = RF_PROTOCOL_FANET;
-    rx_flr_adsl = false;
+    rx_combined = RF_RX_COMBINED_NONE;
 
     if (RF_current_slot == 0) {
       uint8_t abh_chan = adsl_hop_channel(RF_time % 60, (int32_t) ThisAircraft.altitude);
@@ -1369,11 +1490,16 @@ void set_protocol_for_slot()
           FreqPlan flarm_plan;
           flarm_plan.setPlan(settings->band, RF_PROTOCOL_LATEST);
           uint8_t flarm_chan = flarm_plan.getChannel((time_t) RF_time, RF_current_slot, 0);
+          uint8_t ogn_chan = flarm_plan.getChannel((time_t) RF_time, RF_current_slot, 1);
 
           if (abh_chan == flarm_chan) {
               curr_tx_protocol_ptr = &latest_proto_desc;
               protocol_encode = &legacy_encode;
               current_TX_protocol = RF_PROTOCOL_LATEST;
+          } else if (abh_chan == ogn_chan) {
+              curr_tx_protocol_ptr = &ogntp_proto_desc;
+              protocol_encode = &ogntp_encode;
+              current_TX_protocol = RF_PROTOCOL_OGNTP;
           } else {
               curr_tx_protocol_ptr = &adsl_proto_desc;
               protocol_encode = &adsl_encode;
@@ -1405,7 +1531,7 @@ void set_protocol_for_slot()
         protocol_encode = &paw_encode;
         current_RX_protocol = RF_PROTOCOL_P3I;
         current_TX_protocol = RF_PROTOCOL_P3I;
-        rx_flr_adsl = false;
+        rx_combined = RF_RX_COMBINED_NONE;
         RF_FreqPlan.setPlan((uint8_t) settings->band, (uint8_t) RF_PROTOCOL_P3I);
         calc_txpower();
         RF_current_chan = 0;
@@ -1413,6 +1539,7 @@ void set_protocol_for_slot()
     } else {
         RF_FreqPlan.setPlan((uint8_t) settings->band, (uint8_t) RF_PROTOCOL_LATEST);
         uint8_t flarm_chan = RF_FreqPlan.getChannel((time_t) RF_time, RF_current_slot, 0);
+        uint8_t ogn_chan = RF_FreqPlan.getChannel((time_t) RF_time, RF_current_slot, 1);
 
         if (abh_chan == flarm_chan) {
             if (settings->flr_adsl) {
@@ -1426,7 +1553,22 @@ void set_protocol_for_slot()
             protocol_encode = &legacy_encode;
             current_RX_protocol = curr_rx_protocol_ptr->type;
             current_TX_protocol = RF_PROTOCOL_LATEST;
-            rx_flr_adsl = (curr_rx_protocol_ptr == &flr_adsl_proto_desc);
+            rx_combined = (curr_rx_protocol_ptr == &flr_adsl_proto_desc) ?
+                          RF_RX_COMBINED_FLR_ADSL : RF_RX_COMBINED_NONE;
+        } else if (abh_chan == ogn_chan) {
+            if (settings->flr_adsl) {
+                curr_rx_protocol_ptr = &ogn_adsl_proto_desc;
+                protocol_decode = &ogn_adsl_decode;
+                rx_combined = RF_RX_COMBINED_OGN_ADSL;
+            } else {
+                curr_rx_protocol_ptr = &ogntp_proto_desc;
+                protocol_decode = &ogntp_decode;
+                rx_combined = RF_RX_COMBINED_NONE;
+            }
+            curr_tx_protocol_ptr = &ogntp_proto_desc;
+            protocol_encode = &ogntp_encode;
+            current_RX_protocol = RF_PROTOCOL_OGNTP;
+            current_TX_protocol = RF_PROTOCOL_OGNTP;
         } else {
             curr_rx_protocol_ptr = &adsl_proto_desc;
             curr_tx_protocol_ptr = &adsl_proto_desc;
@@ -1434,7 +1576,7 @@ void set_protocol_for_slot()
             protocol_encode = &adsl_encode;
             current_RX_protocol = RF_PROTOCOL_ADSL;
             current_TX_protocol = RF_PROTOCOL_ADSL;
-            rx_flr_adsl = false;
+            rx_combined = RF_RX_COMBINED_NONE;
             RF_FreqPlan.setPlan((uint8_t) settings->band, (uint8_t) RF_PROTOCOL_ADSL);
         }
 
@@ -1610,11 +1752,17 @@ void set_protocol_for_slot()
   current_RX_protocol = curr_rx_protocol_ptr->type;
   current_TX_protocol = curr_tx_protocol_ptr->type;
 #if 0
-  rx_flr_adsl = (dual_protocol == RF_FLR_ADSL  // <<< does not happen unless settings->flr_adsl
+  rx_combined = (dual_protocol == RF_FLR_ADSL  // <<< does not happen unless settings->flr_adsl
               || (settings->flr_adsl
-                  && (current_RX_protocol==RF_PROTOCOL_LATEST || current_RX_protocol==RF_PROTOCOL_ADSL)));
+                  && (current_RX_protocol==RF_PROTOCOL_LATEST || current_RX_protocol==RF_PROTOCOL_ADSL))) ?
+                RF_RX_COMBINED_FLR_ADSL : RF_RX_COMBINED_NONE;
 #else
-  rx_flr_adsl = (curr_rx_protocol_ptr == &flr_adsl_proto_desc);
+  if (curr_rx_protocol_ptr == &flr_adsl_proto_desc)
+      rx_combined = RF_RX_COMBINED_FLR_ADSL;
+  else if (curr_rx_protocol_ptr == &ogn_adsl_proto_desc)
+      rx_combined = RF_RX_COMBINED_OGN_ADSL;
+  else
+      rx_combined = RF_RX_COMBINED_NONE;
 #endif
 
   if (prev_rx_protocol_ptr != curr_rx_protocol_ptr) {
@@ -1643,7 +1791,7 @@ static void set_protocol_for_uplink()
   protocol_encode = &adsl_encode;
   current_RX_protocol = RF_PROTOCOL_ADSL;
   current_TX_protocol = RF_PROTOCOL_ADSL;
-  rx_flr_adsl = false;
+  rx_combined = RF_RX_COMBINED_NONE;
 
   RF_FreqPlan.setPlan((uint8_t) settings->band, (uint8_t) RF_PROTOCOL_P3I);
   calc_txpower();
@@ -1856,7 +2004,9 @@ void RF_loop()
   }
 */
 if (settings->debug_flags & DEBUG_DEEPER) {
-int rxprot = (rx_flr_adsl? 0xD : current_RX_protocol);
+int rxprot = current_RX_protocol;
+if (rx_combined == RF_RX_COMBINED_FLR_ADSL) rxprot = 0xD;
+if (rx_combined == RF_RX_COMBINED_OGN_ADSL) rxprot = 0xE;
 uint32_t txtime = ((current_TX_protocol==RF_PROTOCOL_FANET ||
                    (current_TX_protocol==RF_PROTOCOL_P3I && !use_abh_compat_slots()))?
                         TxTimeMarker2 : TxTimeMarker);

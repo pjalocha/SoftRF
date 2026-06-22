@@ -42,8 +42,8 @@ static navbox_t navbox4;
 static navbox_t navbox5;
 static navbox_t navbox6;
 static char sat_snr_text[10] = "0";
-static char rx_rate_text[10] = "0/min";
-static char tx_rate_text[10] = "0/min";
+static char rx_rate_text[10] = "0";
+static char tx_rate_text[10] = "0";
 
 static uint16_t EPD_packet_rate_ppm(const uint16_t *rate)
 {
@@ -58,12 +58,15 @@ static uint16_t EPD_packet_rate_ppm(const uint16_t *rate)
 
 static void EPD_format_packet_rate(char *buf, size_t size, uint16_t ppm)
 {
+  snprintf(buf, size, "%u", ppm);
+/*
   if (ppm < 120) {
     snprintf(buf, size, "%u/min", ppm);
   } else {
     uint16_t pps10 = (ppm + 3) / 6;     // tenths of packets/s, rounded
     snprintf(buf, size, "%u.%u/s", pps10 / 10, pps10 % 10);
   }
+*/
 }
 
 static void EPD_print_box_value(uint16_t x, uint16_t y, uint16_t width,
@@ -274,7 +277,7 @@ void EPD_status_loop()
 
     navbox1.value = gnss.satellites.value();
     if (GNSS_sat_snr_db > 0)
-      snprintf(sat_snr_text, sizeof(sat_snr_text), "%ld/%udB",
+      snprintf(sat_snr_text, sizeof(sat_snr_text), "%ld/%u",
                (long) navbox1.value, (unsigned int) GNSS_sat_snr_db);
     else
       snprintf(sat_snr_text, sizeof(sat_snr_text), "%ld", (long) navbox1.value);

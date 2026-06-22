@@ -27,6 +27,7 @@
 #include "../../driver/RF.h"
 #include "../../driver/GNSS.h"
 #include "../../driver/Settings.h"
+#include "ADSL.h"
 #include "Legacy.h"
 
 const rf_proto_desc_t ogntp_proto_desc = {
@@ -44,6 +45,40 @@ const rf_proto_desc_t ogntp_proto_desc = {
   .payload_offset  = 0,
   .crc_type        = OGNTP_CRC_TYPE,
   .crc_size        = 0,   // ADSL_CRC_SIZE included within payload_size
+
+  .bitrate         = RF_BITRATE_100KBPS,
+  .deviation       = RF_FREQUENCY_DEVIATION_50KHZ,
+  .whitening       = RF_WHITENING_MANCHESTER,
+  .bandwidth       = RF_RX_BANDWIDTH_SS_125KHZ,
+
+  .air_time        = OGNTP_AIR_TIME,
+
+#if defined(USE_TIME_SLOTS)
+  .tm_type         = RF_TIMING_2SLOTS_PPS_SYNC,
+#else
+  .tm_type         = RF_TIMING_INTERVAL,
+#endif
+  .tx_interval_min = OGNTP_TX_INTERVAL_MIN,
+  .tx_interval_max = OGNTP_TX_INTERVAL_MAX,
+  .slot0           = {400,  800},
+  .slot1           = {800, 1200}
+};
+
+const rf_proto_desc_t ogn_adsl_proto_desc = {
+  "OGN_ADSL",
+  .type            = RF_PROTOCOL_OGNTP,
+  .modulation_type = RF_MODULATION_TYPE_2FSK,
+  .preamble_type   = OGNTP_PREAMBLE_TYPE,
+  .preamble_size   = OGNTP_PREAMBLE_SIZE,
+  .syncword        = OGN_ADSL_SYNCWORD,
+  .syncword_size   = OGN_ADSL_SYNCWORD_SIZE,
+  .syncword_skip   = OGN_ADSL_SYNCWORD_SKIP,
+  .net_id          = 0x0000, /* not in use */
+  .payload_type    = RF_PAYLOAD_INVERTED,
+  .payload_size    = OGN_ADSL_PAYLOAD_SIZE,
+  .payload_offset  = 0,
+  .crc_type        = OGNTP_CRC_TYPE,
+  .crc_size        = 0,
 
   .bitrate         = RF_BITRATE_100KBPS,
   .deviation       = RF_FREQUENCY_DEVIATION_50KHZ,
@@ -149,6 +184,15 @@ bool ogntp_decode(void *pkt, container_t *this_aircraft, ufo_t *fop) {
   fop->hdop      = (ogn_rx_pkt.Packet.DecodeDOP() + 10) * 10;
 
   return true;
+}
+
+bool ogn_adsl_decode(void *buffer, container_t *this_aircraft, ufo_t *fop) {
+
+  if (RF_last_protocol == RF_PROTOCOL_ADSL)
+      return adsl_decode(buffer, this_aircraft, fop);
+  if (RF_last_protocol == RF_PROTOCOL_OGNTP)
+      return ogntp_decode(buffer, this_aircraft, fop);
+  return false;
 }
 
 size_t ogntp_encode(void *pkt, container_t *this_aircraft) {

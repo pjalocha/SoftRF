@@ -32,6 +32,11 @@
 #define OGNTP_CRC_TYPE        RF_CHECKSUM_TYPE_GALLAGER
 #define OGNTP_CRC_SIZE        6
 
+#define OGN_ADSL_SYNCWORD      {0x99, 0x95}
+#define OGN_ADSL_SYNCWORD_SIZE 2
+#define OGN_ADSL_SYNCWORD_SKIP 0
+#define OGN_ADSL_PAYLOAD_SIZE  (OGNTP_PAYLOAD_SIZE + OGNTP_CRC_SIZE + 3)
+
 #define OGNTP_AIR_TIME        5 /* in ms */
 
 #define OGNTP_TX_INTERVAL_MIN 600 /* in ms */
@@ -46,8 +51,10 @@ typedef struct {
 } ogntp_packet_t;
 
 extern const rf_proto_desc_t ogntp_proto_desc;
+extern const rf_proto_desc_t ogn_adsl_proto_desc;
 
 bool ogntp_decode(void *, container_t *, ufo_t *);
+bool ogn_adsl_decode(void *, container_t *, ufo_t *);
 size_t ogntp_encode(void *, container_t *);
 
 #endif /* PROTOCOL_OGNTP_H */
