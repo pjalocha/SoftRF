@@ -13,11 +13,68 @@ This repository is a fork of Moshe Braner's SoftRF project. The earlier
 Moshe Braner version history is preserved below as the `vMB` series.
 Changes made in this fork start a new `vPJ` version series.
 
-The goal was to create two new variants of the SoftRF
-1. variant for ULM, gyro, gliders which interoperates best with FLARM, PilotAware and OGN-Tracker (all at the same time, no need to switch rotocols)
-2. variant for paragliders: FANET is the primary transmit and receive, but transmits pther protocols to be visible by FLARM, ADS-L, PilotAware and OGN-Tracker
+The goal was to create two new variants of the SoftRF:
+1. variant for ULM, gyro, gliders which interoperates best with FLARM, PilotAware and OGN-Tracker (all at the same time, no need to switch protocols)
+2. variant for paragliders: FANET is the primary transmit and receive, but transmits other protocols to be visible by FLARM, ADS-L, PilotAware and OGN-Tracker
 
-The current was is being tested with T-Echo, it compiles with T-Beam-Supreme and T-Motion but has not been tested there yet.
+The current version is being tested with T-Echo, it compiles with T-Beam-Supreme and T-Motion but has not been tested there yet.
+
+### PJ RF operating modes
+
+This fork adds two main RF operating schemes. Both use ADS-L HDR in the
+uplink slot, 200-450 ms after PPS.
+
+**FLARM + ADS-L/LDR/HDR compatibility mode**
+
+This is the default PJ mode for aircraft where FLARM/ADS-L visibility is the
+main goal. It uses the FLARM/Latest protocol together with ADS-L, follows
+Altitude Based Hopping (ABH), transmits FLARM in FLARM slots, ADS-L in ADS-L
+slots, and LDR on the O-band channel. Reception uses the combined short-sync
+receivers where possible, so FLARM slots can receive FLARM and ADS-L, and OGN
+slots can receive OGN and ADS-L.
+
+Settings:
+
+```
+protocol,7
+altprotocol,8
+flr_adsl,1
+```
+
+**FANET-primary compatibility mode**
+
+This mode is intended for paragliders and other FANET-centric use. FANET is the
+main protocol. The radio receives FANET in the normal slots outside the HDR
+uplink slot, transmits FANET in slot 1, and uses slot 0 for compatibility
+transmissions selected by ABH: FLARM, ADS-L, OGN, or LDR as appropriate. This
+keeps the device visible to FLARM, ADS-L/LDR/HDR, PilotAware/OGN-Tracker style
+systems while still treating FANET as the primary network.
+
+Settings:
+
+```
+protocol,5
+altprotocol,8
+flr_adsl,1
+```
+
+Protocol values used above are: `5` = FANET, `7` = FLARM/Latest, `8` = ADS-L.
+The `flr_adsl` setting enables the PJ compatibility scheduler and the combined
+short-sync reception modes.
+
+These settings can be edited in `settings.txt`, or changed over the serial
+configuration interface with `$PSRFS`. For `$PSRFS`, use the long setting
+labels shown above, for example:
+
+```
+$PSRFS,0,protocol,5*
+$PSRFS,0,altprotocol,8*
+$PSRFS,1,flr_adsl,1*
+```
+
+Using version field `1` in the last `$PSRFS` command saves the changed settings
+and reboots. Do not use the internal two-letter shorthand labels in `$PSRFS`;
+for example, use `altprotocol`, not `apaltprotocol`.
 
 ### Latest PJ additions:
 
@@ -92,4 +149,3 @@ For discussions join the [SoftRF Community](https://groups.google.com/g/softrf_c
 <br>
 
 For additional info see also [Lyusupov's repository](https://github.com/lyusupov/SoftRF).
-
