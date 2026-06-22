@@ -25,6 +25,7 @@
 #include <SPI.h>
 #endif /* ARDUINO */
 
+#include <new>
 #include <string.h>
 
 #include <RadioLib.h>
@@ -40,6 +41,7 @@
 #if !defined(EXCLUDE_MAVLINK)
 #include "../protocol/data/MAVLink.h"
 #endif /* EXCLUDE_MAVLINK */
+#include "../protocol/radio/RxPkt.h"
 #include <fec.h>
 
 #if LOGGER_IS_ENABLED
@@ -49,6 +51,7 @@
 #include <manchester.h>
 
 byte RxBuffer[MAX_PKT_SIZE] __attribute__((aligned(sizeof(uint32_t))));
+byte RxErrBuffer[MAX_PKT_SIZE] __attribute__((aligned(sizeof(uint32_t))));
 
 //time_t RF_time;
 uint32_t RF_time;
@@ -97,6 +100,8 @@ uint16_t RF_tx_ppm[RF_STAT_COUNT] = {0};
 
 static uint32_t invalid_manchester_packets = 0;
 static uint8_t  invalid_manchester_counter = 0;
+static SoftRF_RxPacket RF_rx_pkt;
+static LDPC_Decoder *RF_ldpc_decoder = NULL;
 
 //int8_t which_rx_try = 0;
 int8_t RF_last_rssi = 0;
@@ -443,19 +448,28 @@ static void set_initial_protocol(uint8_t protocol)   // only used during RF_setu
   }
 }
 
-uint16_t manchester_decoded(uint8_t *buf)
+uint16_t manchester_decoded(uint8_t *buf, uint8_t *err)
 {
     uint8_t val1 = pgm_read_byte(&ManchesterDecode[*buf]);
-    if (val1 & 0xF0)  // invalid value, rx error
+    uint8_t err1 = val1 & 0xF0;
+    if (err1)  // invalid value, rx error
         ++invalid_manchester_counter;
     buf++;
     uint8_t val2 = pgm_read_byte(&ManchesterDecode[*buf]);
-    if (val2 & 0xF0)
+    uint8_t err2 = val2 & 0xF0;
+    if (err2)
         ++invalid_manchester_counter;
+    if (err)
+        *err = err1 | (err2 >> 4);
     return ((val1 & 0x0F) << 4) | (val2 & 0x0F);
 }
 
-#define REJECT_INVALID_MANCHESTER 1
+uint16_t manchester_decoded(uint8_t *buf)
+{
+    return manchester_decoded(buf, NULL);
+}
+
+#define REJECT_INVALID_MANCHESTER 0
 
 static uint8_t RF_Count_Bits(uint8_t value)
 {
@@ -467,64 +481,27 @@ static uint8_t RF_Count_Bits(uint8_t value)
     return count;
 }
 
-static uint8_t RF_Diff_Bits(const uint8_t *data, const uint8_t *sign,
-                            const uint8_t *mask, uint8_t len)
+static bool RF_Decode_Combined_Manch_Rx(uint8_t sys_id, uint8_t raw_size,
+                                        uint8_t *size, unsigned *crc_type)
 {
-    uint8_t diff = 0;
-    for (uint8_t i = 0; i < len; ++i)
-        diff += RF_Count_Bits((data[i] ^ sign[i]) & mask[i]);
-    return diff;
-}
-
-static uint8_t RF_Bit_Shift_Left(uint8_t *data, uint8_t bytes, uint8_t bits)
-{
-    uint8_t byte_offset = bits >> 3;
-    uint8_t bit_offset  = bits & 0x07;
-
-    if (bytes <= byte_offset)
-        return 0;
-
-    bytes -= byte_offset;
-    if (bit_offset == 0) {
-        memmove(data, data + byte_offset, bytes);
-        return bytes;
-    }
-
-    if (bytes <= 1)
-        return 0;
-
-    uint8_t out_bytes = bytes - 1;
-    for (uint8_t i = 0; i < out_bytes; ++i) {
-        uint8_t msb = data[byte_offset + i];
-        uint8_t lsb = data[byte_offset + i + 1];
-        data[i] = (msb << bit_offset) | (lsb >> (8 - bit_offset));
-    }
-    return out_bytes;
-}
-
-static bool RF_Decode_Ogn_Adsl_Rx(uint8_t raw_size, uint8_t *size,
-                                  unsigned *crc_type)
-{
-    static const uint8_t ADSL_SIGN[3] = {0x24, 0xB1, 0x80};
-    static const uint8_t ADSL_MASK[3] = {0xFF, 0xFF, 0xF0};
-    static const uint8_t OGN_SIGN[3]  = {0x9B, 0x2B, 0x60};
-    static const uint8_t OGN_MASK[3]  = {0xFF, 0xFF, 0xF8};
-
     uint8_t decoded_size = raw_size >> 1;
-    if (decoded_size > sizeof(RxBuffer))
-        decoded_size = sizeof(RxBuffer);
+    if (decoded_size > SoftRF_RxPacket::MaxBytes)
+        decoded_size = SoftRF_RxPacket::MaxBytes;
+
+    RF_rx_pkt.Clear();
+    RF_rx_pkt.SysID = sys_id;
+    RF_rx_pkt.Bytes = decoded_size;
+    RF_rx_pkt.Channel = RF_current_chan;
+    RF_rx_pkt.RSSI = (uint8_t) (-2 * RF_last_rssi);
+    RF_rx_pkt.Manchester = true;
 
     invalid_manchester_counter = 0;
     uint8_t *p = RL_rxPacket;
     for (uint8_t i = 0; i < decoded_size; ++i) {
-        uint16_t val = manchester_decoded(p);
-#if REJECT_INVALID_MANCHESTER
-        if (invalid_manchester_counter > 1) {
-            ++invalid_manchester_packets;
-            return false;
-        }
-#endif
-        RxBuffer[i] = (val & 0xFF);
+        uint8_t err = 0;
+        uint16_t val = manchester_decoded(p, &err);
+        RF_rx_pkt.Data[i] = (val & 0xFF);
+        RF_rx_pkt.Err[i] = err;
         p += 2;
     }
 
@@ -533,28 +510,167 @@ static bool RF_Decode_Ogn_Adsl_Rx(uint8_t raw_size, uint8_t *size,
         ++invalid_manchester_packets;
 #endif
 
-    uint8_t shift = 0;
-    uint8_t expected_size = 0;
-    if (RF_Diff_Bits(RxBuffer, ADSL_SIGN, ADSL_MASK, sizeof(ADSL_SIGN)) <= 1) {
+    uint8_t decoded_sys = RF_rx_pkt.DecodeSysID();
+    switch (decoded_sys) {
+    case SOFTRF_RX_SYS_ADSL:
         RF_last_protocol = RF_PROTOCOL_ADSL;
         *crc_type = RF_CHECKSUM_TYPE_CRC_MODES;
-        shift = 20;
-        expected_size = ADSL_PAYLOAD_SIZE + ADSL_CRC_SIZE;
-    } else if (RF_Diff_Bits(RxBuffer, OGN_SIGN, OGN_MASK, sizeof(OGN_SIGN)) <= 1) {
+        break;
+    case SOFTRF_RX_SYS_OGN:
         RF_last_protocol = RF_PROTOCOL_OGNTP;
         *crc_type = RF_CHECKSUM_TYPE_GALLAGER;
-        shift = 21;
-        expected_size = OGNTP_PAYLOAD_SIZE + OGNTP_CRC_SIZE;
-    } else {
+        break;
+    case SOFTRF_RX_SYS_FLR:
+        RF_last_protocol = RF_PROTOCOL_LATEST;
+        *crc_type = RF_CHECKSUM_TYPE_CCITT_FFFF;
+        break;
+    default:
         RF_last_protocol = RF_PROTOCOL_NONE;
         return false;
     }
 
-    *size = RF_Bit_Shift_Left(RxBuffer, decoded_size, shift);
-    if (*size > expected_size)
-        *size = expected_size;
+    if (RF_rx_pkt.ErrCount() >= 16)
+        return false;
 
-    return (*size == expected_size);
+    *size = RF_rx_pkt.Bytes;
+    memcpy(RxBuffer, RF_rx_pkt.Data, *size);
+    memcpy(RxErrBuffer, RF_rx_pkt.Err, *size);
+    return true;
+}
+
+static uint8_t RF_Sys_From_Protocol(uint8_t protocol)
+{
+    switch (protocol) {
+    case RF_PROTOCOL_LEGACY:
+    case RF_PROTOCOL_LATEST:
+        return SOFTRF_RX_SYS_FLR;
+    case RF_PROTOCOL_OGNTP:
+        return SOFTRF_RX_SYS_OGN;
+    case RF_PROTOCOL_ADSL:
+        return SOFTRF_RX_SYS_ADSL;
+    case RF_PROTOCOL_P3I:
+        return SOFTRF_RX_SYS_LDR;
+    case RF_PROTOCOL_FANET:
+        return SOFTRF_RX_SYS_FNT;
+    default:
+        return SOFTRF_RX_SYS_NONE;
+    }
+}
+
+static uint16_t RF_Check_Flr_Crc(const uint8_t *data, uint8_t size)
+{
+    if (size < 2)
+        return 0xFFFF;
+
+    uint16_t crc = 0xffff;
+    crc = update_crc_ccitt(crc, 0x31);
+    crc = update_crc_ccitt(crc, 0xFA);
+    crc = update_crc_ccitt(crc, 0xB6);
+    for (uint8_t i = 0; i < size - 2; ++i)
+        crc = update_crc_ccitt(crc, (u1_t) data[i]);
+
+    uint16_t pkt_crc = ((uint16_t) data[size - 2] << 8) | data[size - 1];
+    return crc ^ pkt_crc;
+}
+
+static void RF_Flip_Bit(uint8_t *data, uint8_t bit)
+{
+    data[bit >> 3] ^= (uint8_t) (0x80 >> (bit & 0x07));
+}
+
+static int RF_Correct_Flr_Crc(uint8_t *data, const uint8_t *err,
+                              uint8_t size, uint8_t max_bad_bits)
+{
+    if (RF_Check_Flr_Crc(data, size) == 0)
+        return 0;
+
+    uint8_t total_bits = size * 8;
+    for (uint8_t bit = 0; bit < total_bits; ++bit) {
+        RF_Flip_Bit(data, bit);
+        if (RF_Check_Flr_Crc(data, size) == 0)
+            return 1;
+        RF_Flip_Bit(data, bit);
+    }
+
+    uint8_t bad_bits[8];
+    uint8_t bad_count = 0;
+    for (uint8_t byte = 0; byte < size; ++byte) {
+        uint8_t mask = 0x80;
+        for (uint8_t bit = 0; bit < 8; ++bit) {
+            if (err[byte] & mask) {
+                if (bad_count >= max_bad_bits || bad_count >= sizeof(bad_bits))
+                    return -1;
+                bad_bits[bad_count++] = byte * 8 + bit;
+            }
+            mask >>= 1;
+        }
+    }
+
+    if (bad_count == 0)
+        return -1;
+
+    uint8_t original[SoftRF_RxPacket::MaxBytes];
+    memcpy(original, data, size);
+    uint8_t loops = (uint8_t) (1U << bad_count);
+    for (uint8_t combo = 1; combo < loops; ++combo) {
+        memcpy(data, original, size);
+        for (uint8_t idx = 0; idx < bad_count; ++idx) {
+            if (combo & (1U << idx))
+                RF_Flip_Bit(data, bad_bits[idx]);
+        }
+        if (RF_Check_Flr_Crc(data, size) == 0)
+            return RF_Count_Bits(combo);
+    }
+
+    memcpy(data, original, size);
+    return -1;
+}
+
+static int RF_Try_Correct_Rx(uint8_t size, unsigned crc_type)
+{
+    if (size > SoftRF_RxPacket::MaxBytes)
+        return -1;
+
+    uint8_t sys_id = RF_last_protocol != RF_PROTOCOL_NONE ?
+                     RF_Sys_From_Protocol(RF_last_protocol) :
+                     RF_Sys_From_Protocol(current_RX_protocol);
+    RF_rx_pkt.Set(sys_id, RxBuffer, RxErrBuffer, size, true,
+                  RF_current_chan, RF_last_rssi);
+
+    if (RF_rx_pkt.ErrCount() >= 16)
+        return -1;
+
+    if (crc_type == RF_CHECKSUM_TYPE_CRC_MODES && size == ADSL_PAYLOAD_SIZE + ADSL_CRC_SIZE) {
+        int corrected = RF_rx_pkt.CorrectADSL();
+        if (corrected >= 0) {
+            memcpy(RxBuffer, RF_rx_pkt.Data, size);
+            return corrected;
+        }
+    } else if (crc_type == RF_CHECKSUM_TYPE_GALLAGER && size == OGNTP_PAYLOAD_SIZE + OGNTP_CRC_SIZE) {
+        uint8_t check = LDPC_Check((uint8_t *) RxBuffer);
+        if (check == 0)
+            return 0;
+        if (RF_ldpc_decoder == NULL)
+            RF_ldpc_decoder = new (std::nothrow) LDPC_Decoder;
+        if (RF_ldpc_decoder == NULL)
+            return -1;
+        check = RF_rx_pkt.CorrectOGN(*RF_ldpc_decoder);
+        if (check == 0) {
+            memcpy(RxBuffer, RF_rx_pkt.Data, size);
+            return 1;
+        }
+    } else if (crc_type == RF_CHECKSUM_TYPE_CCITT_FFFF &&
+               size == LEGACY_PAYLOAD_SIZE + LEGACY_CRC_SIZE) {
+        uint8_t data[SoftRF_RxPacket::MaxBytes];
+        memcpy(data, RxBuffer, size);
+        int corrected = RF_Correct_Flr_Crc(data, RxErrBuffer, size, 4);
+        if (corrected >= 0) {
+            memcpy(RxBuffer, data, size);
+            return corrected;
+        }
+    }
+
+    return -1;
 }
 
 static bool receive()
@@ -603,15 +719,18 @@ Serial.println(bytes2Hex((byte *)RL_rxPacket, size));
   unsigned crc_type = curr_rx_protocol_ptr->crc_type;
   bool decoded_combined = false;
 //  if (curr_rx_protocol_ptr == &flr_adsl_proto_desc)
-  if (rx_combined == RF_RX_COMBINED_OGN_ADSL) {
-    if (sw_manchester) {
-      if (!RF_Decode_Ogn_Adsl_Rx(size, &size, &crc_type))
-          return 0;
-      decoded_combined = true;
-    } else {
-      RF_last_protocol = RF_PROTOCOL_NONE;
-      return 0;
-    }
+  memset(RxErrBuffer, 0, sizeof(RxErrBuffer));
+  RF_rx_pkt.Clear();
+
+  if (rx_combined != RF_RX_COMBINED_NONE && sw_manchester) {
+    uint8_t sys_id = rx_combined == RF_RX_COMBINED_FLR_ADSL ?
+                     SOFTRF_RX_SYS_FLR_ADSL : SOFTRF_RX_SYS_OGN_ADSL;
+    if (!RF_Decode_Combined_Manch_Rx(sys_id, size, &size, &crc_type))
+        return 0;
+    decoded_combined = true;
+  } else if (rx_combined == RF_RX_COMBINED_OGN_ADSL) {
+    RF_last_protocol = RF_PROTOCOL_NONE;
+    return 0;
   } else if (rx_combined == RF_RX_COMBINED_FLR_ADSL) {
     if (sw_manchester) {
       // examine 2 later bytes in the sync word to identify the protocol
@@ -677,12 +796,16 @@ byte1, byte2, FLR_ID_BYTE_1, FLR_ID_BYTE_2);
       // skip the unused sync bytes
       size -= 3;
       // shift the payload bits as needed
-      uint16_t val = manchester_decoded(&RL_rxPacket[4]);
+      uint8_t err = 0;
+      uint16_t val = manchester_decoded(&RL_rxPacket[4], &err);
       byte prevbyte = (val & 0xFF);
+      byte preverr = err;
       byte *p = &RL_rxPacket[6];
       byte *r = &RxBuffer[0];
+      byte *e = &RxErrBuffer[0];
       for (u1_t i=0; i < size; i++) {
-          val = manchester_decoded(p);
+          err = 0;
+          val = manchester_decoded(p, &err);
 #if REJECT_INVALID_MANCHESTER
           if (invalid_manchester_counter > 1) {
               // chances of passing CRC are slim, abort this packet
@@ -692,8 +815,11 @@ Serial.println("invalid Manchester");
           }
 #endif
           byte newbyte = (val & 0xFF);
+          byte newerr = err;
           *r++ = (prevbyte << 7) | (newbyte >> 1);
+          *e++ = (preverr << 7) | (newerr >> 1);
           prevbyte = newbyte;
+          preverr = newerr;
           p += 2;
       }
     } else {
@@ -702,7 +828,8 @@ Serial.println("invalid Manchester");
       size -= offset;
       byte *p = &RL_rxPacket[offset+offset];
       for (u1_t i=0; i < size; i++) {
-          uint16_t val = manchester_decoded(p);
+          uint8_t err = 0;
+          uint16_t val = manchester_decoded(p, &err);
 #if REJECT_INVALID_MANCHESTER
           if (invalid_manchester_counter > 1) {
               // chances of passing CRC are slim, abort this packet
@@ -711,6 +838,7 @@ Serial.println("invalid Manchester");
           }
 #endif
           RxBuffer[i] = (val & 0xFF);
+          RxErrBuffer[i] = err;
           p += 2;
       }
       RF_last_protocol = current_RX_protocol;
@@ -730,8 +858,10 @@ Serial.println("invalid Manchester");
       byte *p = &RL_rxPacket[2];
       byte *q = &RL_rxPacket[3];
       byte *r = &RxBuffer[0];
+      byte *e = &RxErrBuffer[0];
       for (u1_t i=0; i < size; i++) {
           *r++ = ~((*p << 7) | (*q >> 1));
+          *e++ = 0;
           ++p;
           ++q;
       }
@@ -760,6 +890,12 @@ Serial.println(bytes2Hex((byte *)RxBuffer, size));
 //Serial.println(bytes2Hex((byte *) RxBuffer, size));
 
   // now can compute and check the CRC
+
+  int corrected_bits = -1;
+  if (sw_manchester)
+      corrected_bits = RF_Try_Correct_Rx(size, crc_type);
+  if (corrected_bits > 0 && (settings->debug_flags & DEBUG_DEEPER))
+      Serial.printf("RF corrected %d bit(s) before CRC/FEC check\r\n", corrected_bits);
 
   uint8_t size2 = size - curr_rx_protocol_ptr->crc_size;
 
