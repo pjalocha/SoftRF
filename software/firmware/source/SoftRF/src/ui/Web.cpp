@@ -153,7 +153,7 @@ static const char about_html[] PROGMEM = "<html>\
   </head>\
 <body>\
 <h1>About</h1>\
-<h4>&nbsp;&nbsp;&nbsp;&nbsp;This version of SoftRF by Moshe Braner</h4>\
+<h4>&nbsp;&nbsp;&nbsp;&nbsp;PJ fork based on Moshe Braner's SoftRF</h4>\
 <h4>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;http://github.com/moshe-braner/SoftRF</h4>\
 <h4>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mo\
 she.bra\

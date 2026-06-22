@@ -7,7 +7,27 @@ DIY, multifunctional, compatible, sub-1 GHz ISM band radio based proximity aware
 
 <p><img src="https://github.com/moshe-braner/SoftRF/blob/master/software/firmware/documentation/T-Beam_MB149_.jpg"></p>
 
-### Latest major additions:
+### About this fork
+
+This repository is a fork of Moshe Braner's SoftRF project. The earlier
+Moshe Braner version history is preserved below as the `vMB` series.
+Changes made in this fork start a new `vPJ` version series.
+
+The goal was to create two new variants of the SoftRF
+1. variant for ULM, gyro, gliders which interoperates best with FLARM, PilotAware and OGN-Tracker (all at the same time, no need to switch rotocols)
+2. variant for paragliders: FANET is the primary transmit and receive, but transmits pther protocols to be visible by FLARM, ADS-L, PilotAware and OGN-Tracker
+
+The current was is being tested with T-Echo, it compiles with T-Beam-Supreme and T-Motion but has not been tested there yet.
+
+### Latest PJ additions:
+
+* vPJ001: added PlatformIO build profiles for T-Echo, T-Beam Supreme, and T-Motion
+* vPJ001: added ADS-L HDR uplink operation in the 200-450 ms PPS slot
+* vPJ001: added ABH-based FLARM/ADS-L/LDR compatibility scheduling
+* vPJ001: added FANET-primary mode with FANET reception outside the uplink slot and compatibility TX in slot 0
+* vPJ001: added RF packet counters/rates and GPS satellite SNR reporting
+
+### Previous MB additions:
 
 * vMB203: now supports messaging (PFLAM)
 * vMB202: using RadioLib, now supports the Sensecap T1000-E and Thinknode M3 (& M1)
@@ -72,5 +92,4 @@ For discussions join the [SoftRF Community](https://groups.google.com/g/softrf_c
 <br>
 
 For additional info see also [Lyusupov's repository](https://github.com/lyusupov/SoftRF).
-
 

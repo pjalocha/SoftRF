@@ -174,7 +174,7 @@ void setup()
   //Serial.println(String(SoC->getChipId(), HEX));
   Serial.println(SoC->getChipId(), HEX);
   Serial.println(F("Copyright (C) 2015-2021 Linar Yusupov. All rights reserved."));
-  Serial.println(F("This fork by Moshe Braner, 2024"));
+  Serial.println(F("PJ fork, based on Moshe Braner's SoftRF"));
   Serial.flush();
 
   if (resetInfo) {
