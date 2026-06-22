@@ -1534,6 +1534,41 @@ void CopyTraffic(container_t *cip, ufo_t *fop, const char *callsign)
     }
 }
 
+bool Traffic_Update_Callsign(uint32_t addr, uint8_t addr_type, const char *callsign)
+{
+    if (callsign == NULL || callsign[0] == '\0' || callsign[0] == ' ')
+        return false;
+
+    char trimmed[CALLSIGN_LEN];
+    strncpy(trimmed, callsign, CALLSIGN_LEN - 1);
+    trimmed[CALLSIGN_LEN - 1] = '\0';
+
+    size_t len = strlen(trimmed);
+    while (len > 0 && trimmed[len - 1] == ' ')
+        trimmed[--len] = '\0';
+    if (len == 0)
+        return false;
+
+    for (int i=0; i < MAX_TRACKING_OBJECTS; i++) {
+        container_t *cip = &Container[i];
+        if (cip->addr != addr)
+            continue;
+        if (cip->addr_type != addr_type)
+            continue;
+
+        bool no_cip_callsign = (cip->callsign[0] == '\0' || cip->callsign[0] == ' ');
+        bool has_n_number = (cip->callsign[CALLSIGN_LEN-1] == '?');
+        if (no_cip_callsign || has_n_number) {
+            strncpy((char *)cip->callsign, trimmed, CALLSIGN_LEN - 1);
+            cip->callsign[CALLSIGN_LEN - 1] = '\0';
+            NMEA_PFLAM(PFLAM_ACALL, cip, cip->callsign);
+        }
+        return true;
+    }
+
+    return false;
+}
+
 void report_landed_out(ufo_t *fop)
 {
     snprintf_P(NMEABuffer, sizeof(NMEABuffer),

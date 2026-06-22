@@ -82,6 +82,7 @@ enum
 
 void air_relay(container_t *fop);
 void AddTraffic(ufo_t *fop, const char *callsign);
+bool Traffic_Update_Callsign(uint32_t addr, uint8_t addr_type, const char *callsign);
 void ParseData(void);
 void Traffic_setup(void);
 void Traffic_loop(void);

@@ -129,7 +129,19 @@ bool adsl_decode(void *pkt, container_t *this_aircraft, ufo_t *fop) {
 
   adsl_r.Descramble();
 
-  if (adsl_r.Type != 0x02)   // not iConspicuity
+  if (adsl_r.isTelemetry()) {
+      uint32_t addr = adsl_r.getAddress();
+      if (addr == settings->ignore_id || addr == ThisAircraft.addr)
+          return false;
+
+      char callsign[16] = { 0 };
+      if (adsl_r.getInfo(callsign, 5) > 0)
+          Traffic_Update_Callsign(addr, adsl_r.getAddrTypeOGN(), callsign);
+
+      return false;   // telemetry/info packets are not position traffic
+  }
+
+  if (!adsl_r.isPosition())   // not iConspicuity
       return false;
 
   fop->protocol  = RF_PROTOCOL_ADSL;

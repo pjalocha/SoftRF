@@ -24,6 +24,7 @@
 #include <TimeLib.h>
 
 #include "../../../SoftRF.h"
+#include "../../TrafficHelper.h"
 #include "../../driver/RF.h"
 #include "../../driver/GNSS.h"
 #include "../../driver/Settings.h"
@@ -124,12 +125,12 @@ bool ogntp_decode(void *pkt, container_t *this_aircraft, ufo_t *fop) {
 //    return false;
 //  }
 
-  if ( ogn_rx_pkt.Packet.Header.Other ||
+  if (
 #if defined(USE_OGN_ENCRYPTION)
-      (ogn_rx_pkt.Packet.Header.Encrypted &&
-       !(key[0] || key[1] || key[2] || key[3]))
+      ogn_rx_pkt.Packet.Header.Encrypted &&
+      !(key[0] || key[1] || key[2] || key[3])
 #else
-       ogn_rx_pkt.Packet.Header.Encrypted
+      ogn_rx_pkt.Packet.Header.Encrypted
 #endif
      ) {
     return false;
@@ -155,6 +156,20 @@ bool ogntp_decode(void *pkt, container_t *this_aircraft, ufo_t *fop) {
   else
 #endif
     ogn_rx_pkt.Packet.Dewhiten();
+
+  if (ogn_rx_pkt.Packet.Header.Other) {
+    if (ogn_rx_pkt.Packet.isInfo() && ogn_rx_pkt.Packet.goodInfoCheck()) {
+      uint32_t addr = ogn_rx_pkt.Packet.Header.Address;
+      if (addr != settings->ignore_id && addr != ThisAircraft.addr) {
+        char callsign[16] = { 0 };
+        uint8_t addr_type =
+            (ogn_rx_pkt.Packet.Header.AddrType == ADDR_TYPE_ICAO ? ADDR_TYPE_ICAO : ADDR_TYPE_FLARM);
+        if (ogn_rx_pkt.Packet.getInfo(callsign, 5) > 0)
+          Traffic_Update_Callsign(addr, addr_type, callsign);
+      }
+    }
+    return false;   // status/info packets are not position traffic
+  }
 
   fop->protocol  = RF_PROTOCOL_OGNTP;
 

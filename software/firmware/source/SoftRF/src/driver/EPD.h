@@ -29,12 +29,12 @@
 #define NO_DATA_TEXT            "NO DATA"
 #define NO_FIX_TEXT             "NO FIX"
 
-#define NAVBOX1_TITLE           "SAT"
-#define NAVBOX2_TITLE           "BAT"
+#define NAVBOX1_TITLE           "SAT/SNR"
+#define NAVBOX2_TITLE           "BAT [V]"
 #define NAVBOX3_TITLE           "ACFTS"
 #define NAVBOX4_TITLE           "ALARM"
-#define NAVBOX5_TITLE           "RX"
-#define NAVBOX6_TITLE           "TX"
+#define NAVBOX5_TITLE           "RX/min"
+#define NAVBOX6_TITLE           "TX/min"
 
 #define isTimeToEPD()           (millis() - EPDTimeMarker > 1000)
 #define maxof2(a,b)             (a > b ? a : b)
