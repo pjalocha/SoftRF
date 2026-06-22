@@ -106,7 +106,9 @@ static uint8_t alarm2_rssi = 41;    // at 41+ give alarm level "important"
 
 static void zero_stats()
 {
+#if defined(ESP32)
     SPIFFS.remove("/rssidist.txt");
+#endif
     for (int rssi=MINRSSI; rssi <= MAXRSSI; rssi++)
        zone_stats[rssi-MINRSSI] = {0};
 }
@@ -114,6 +116,9 @@ static void zero_stats()
 // try and load RSSI stats from file
 static bool load_zone_stats()
 {
+#if !defined(ESP32)
+    return false;
+#else
     if (! SPIFFS.exists("/rssidist.txt")) {
         Serial.println("rssidist.txt does not exist in SPIFFS");
         return false;
@@ -167,6 +172,7 @@ static bool load_zone_stats()
     }
     statsfile.close();
     return true;
+#endif
 }
 
 static void set_zone_thresholds(bool force)
@@ -270,6 +276,9 @@ static void sample_rssi_zone(uint8_t rssi, float distance, float alt_diff)
 // this is called after landing
 void save_zone_stats()
 {
+#if !defined(ESP32)
+    return;
+#else
     if (stats_count <= 0) {
         Serial.println("no update to rssidist.txt");
         return;
@@ -296,6 +305,7 @@ void save_zone_stats()
         // - it will prepend LSRF, resulting in, e.g., LSRFRD,31,1234,321,45,7
     }
     statsfile.close();
+#endif
 }
 
 // print the stats at any time

@@ -46,6 +46,43 @@
 #error "RTC configuration is missing. Check flag HAL_RTC_MODULE_ENABLED in variants/board_name/stm32yzxx_hal_conf.h"
 #endif
 
+#ifndef OFF_MSK
+#define OFF_MSK 0
+#endif
+#ifndef SS_MSK
+#define SS_MSK 1
+#endif
+#ifndef MM_MSK
+#define MM_MSK 2
+#endif
+#ifndef HH_MSK
+#define HH_MSK 4
+#endif
+#ifndef D_MSK
+#define D_MSK 8
+#endif
+#ifndef M_MSK
+#define M_MSK 0
+#endif
+#ifndef Y_MSK
+#define Y_MSK 0
+#endif
+#ifndef HOUR_FORMAT_12
+#define HOUR_FORMAT_12 RTC_HOURFORMAT_12
+#endif
+#ifndef HOUR_FORMAT_24
+#define HOUR_FORMAT_24 RTC_HOURFORMAT_24
+#endif
+#ifndef HOUR_AM
+#define HOUR_AM RTC_HOURFORMAT12_AM
+#endif
+#ifndef HOUR_PM
+#define HOUR_PM RTC_HOURFORMAT12_PM
+#endif
+#ifndef hourAM_PM_t
+typedef uint8_t hourAM_PM_t;
+#endif
+
 typedef void(*voidFuncPtr)(void *);
 
 #define IS_CLOCK_SOURCE(SRC) (((SRC) == STM32RTC::LSI_CLOCK) || ((SRC) == STM32RTC::LSE_CLOCK) ||\
@@ -186,11 +223,7 @@ public:
     return _alarmEnabled;
   }
   bool isTimeSet(void) {
-#if defined(STM32_CORE_VERSION) && (STM32_CORE_VERSION  > 0x01050000)
-    return RTC_IsTimeSet();
-#else
-    return false;
-#endif
+    return _configured;
   }
 
   friend class STM32LowPower;

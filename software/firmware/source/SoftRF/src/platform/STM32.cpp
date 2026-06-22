@@ -25,8 +25,8 @@
 #include "../system/SoC.h"
 #include "../driver/RF.h"
 #include "../driver/LED.h"
-#include "../driver/Sound.h"
-#include "../driver/EEPROM.h"
+#include "../driver/Buzzer.h"
+#include <EEPROM.h>
 #include "../driver/Battery.h"
 #include "../driver/OLED.h"
 #include "../driver/Baro.h"
@@ -98,6 +98,28 @@ static struct rst_info reset_info = {
 };
 
 static uint32_t bootCount = 0;
+
+#if defined(ARDUINO_NUCLEO_L073RZ)
+static void STM32_tcxo_init()
+{
+  GPIO_InitTypeDef GPIO_Struct;
+
+  __HAL_RCC_GPIOD_CLK_ENABLE();
+
+  GPIO_Struct.Pin = GPIO_PIN_7;
+  GPIO_Struct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_Struct.Pull = GPIO_NOPULL;
+  GPIO_Struct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOD, &GPIO_Struct);
+}
+
+static void STM32_tcxo(bool enable)
+{
+  if (lmic_pins.tcxo == PD_7) {
+    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_7, enable ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  }
+}
+#endif /* ARDUINO_NUCLEO_L073RZ */
 
 static int STM32_probe_pin(uint32_t pin, uint32_t mode)
 {
@@ -214,8 +236,8 @@ static void STM32_setup()
 #endif
     if (STM32_has_TCXO) {
       lmic_pins.tcxo = SOC_GPIO_PIN_TCXO_OE;
-      hal_pin_tcxo_init();
-      hal_pin_tcxo(0); // disable TCXO
+      STM32_tcxo_init();
+      STM32_tcxo(false); // disable TCXO
     }
 
     /* De-activate 1.8V<->3.3V level shifters */
@@ -369,27 +391,27 @@ static void STM32_post_init()
   Serial.print(F("NMEA   - "));
   switch (settings->nmea_out)
   {
-    case NMEA_UART       :  Serial.println(F("UART"));          break;
-    case NMEA_USB        :  Serial.println(F("USB CDC"));       break;
-    case NMEA_OFF        :
+    case DEST_UART       :  Serial.println(F("UART"));          break;
+    case DEST_USB        :  Serial.println(F("USB CDC"));       break;
+    case DEST_NONE       :
     default              :  Serial.println(F("NULL"));          break;
   }
 
   Serial.print(F("GDL90  - "));
   switch (settings->gdl90)
   {
-    case GDL90_UART      :  Serial.println(F("UART"));          break;
-    case GDL90_USB       :  Serial.println(F("USB CDC"));       break;
-    case GDL90_OFF       :
+    case DEST_UART       :  Serial.println(F("UART"));          break;
+    case DEST_USB        :  Serial.println(F("USB CDC"));       break;
+    case DEST_NONE       :
     default              :  Serial.println(F("NULL"));          break;
   }
 
   Serial.print(F("D1090  - "));
   switch (settings->d1090)
   {
-    case D1090_UART      :  Serial.println(F("UART"));          break;
-    case D1090_USB       :  Serial.println(F("USB CDC"));       break;
-    case D1090_OFF       :
+    case DEST_UART       :  Serial.println(F("UART"));          break;
+    case DEST_USB        :  Serial.println(F("USB CDC"));       break;
+    case DEST_NONE       :
     default              :  Serial.println(F("NULL"));          break;
   }
 
@@ -520,11 +542,11 @@ static void STM32_Sound_test(int var)
   }
 }
 
-static void STM32_Sound_tone(int hz, uint8_t volume)
+static void STM32_Sound_tone(int hz, int duration)
 {
-  if (SOC_GPIO_PIN_BUZZER != SOC_UNUSED_PIN && volume != BUZZER_OFF) {
+  if (SOC_GPIO_PIN_BUZZER != SOC_UNUSED_PIN && settings->volume != BUZZER_OFF) {
     if (hz > 0) {
-      tone(SOC_GPIO_PIN_BUZZER, hz, ALARM_TONE_MS);
+      tone(SOC_GPIO_PIN_BUZZER, hz, duration);
     } else {
       noTone(SOC_GPIO_PIN_BUZZER);
     }
@@ -550,54 +572,6 @@ static bool STM32_EEPROM_begin(size_t size)
   EEPROM.begin();
 
   return true;
-}
-
-static void STM32_EEPROM_extension(int cmd)
-{
-  if (cmd == EEPROM_EXT_LOAD) {
-    if (settings->mode != SOFTRF_MODE_NORMAL
-#if !defined(EXCLUDE_TEST_MODE)
-        &&
-        settings->mode != SOFTRF_MODE_TXRX_TEST
-#endif /* EXCLUDE_TEST_MODE */
-        ) {
-      settings->mode = SOFTRF_MODE_NORMAL;
-    }
-
-    if (settings->nmea_out == NMEA_BLUETOOTH ||
-        settings->nmea_out == NMEA_UDP       ||
-        settings->nmea_out == NMEA_TCP ) {
-#if defined(USBD_USE_CDC) && !defined(DISABLE_GENERIC_SERIALUSB)
-      settings->nmea_out = NMEA_USB;
-#else
-      settings->nmea_out = NMEA_UART;
-#endif
-    }
-    if (settings->gdl90 == GDL90_BLUETOOTH  ||
-        settings->gdl90 == GDL90_UDP) {
-#if defined(USBD_USE_CDC) && !defined(DISABLE_GENERIC_SERIALUSB)
-      settings->gdl90 = GDL90_USB;
-#else
-      settings->gdl90 = GDL90_UART;
-#endif
-    }
-    if (settings->d1090 == D1090_BLUETOOTH  ||
-        settings->d1090 == D1090_UDP) {
-#if defined(USBD_USE_CDC) && !defined(DISABLE_GENERIC_SERIALUSB)
-      settings->d1090 = D1090_USB;
-#else
-      settings->d1090 = D1090_UART;
-#endif
-    }
-
-#if defined(ARDUINO_NUCLEO_L073RZ)
-    if (hw_info.model == SOFTRF_MODEL_BRACELET) {
-      if (settings->nmea_out == NMEA_UART)  { settings->nmea_out = NMEA_USB;  }
-      if (settings->gdl90    == GDL90_UART) { settings->gdl90    = GDL90_USB; }
-      if (settings->d1090    == D1090_UART) { settings->d1090    = D1090_USB; }
-    }
-#endif /* ARDUINO_NUCLEO_L073RZ */
-  }
 }
 
 static void STM32_SPI_begin()
@@ -927,7 +901,7 @@ const SoC_ops_t STM32_ops = {
   NULL,
   NULL,
   STM32_EEPROM_begin,
-  STM32_EEPROM_extension,
+  //STM32_EEPROM_extension,
   STM32_SPI_begin,
   STM32_swSer_begin,
   STM32_swSer_enableRx,

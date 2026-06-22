@@ -40,8 +40,10 @@
 #include <SD.h>
 #include <FS.h>
 #endif
-#if defined(ESP32)
+#if defined(USE_OLED)
 #include "../../driver/OLED.h"
+#endif
+#if defined(ESP32)
 #include "../../driver/Strobe.h"
 #endif
 #include "../../driver/Bluetooth.h"

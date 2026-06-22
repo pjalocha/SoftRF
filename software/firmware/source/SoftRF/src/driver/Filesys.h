@@ -67,9 +67,26 @@ static inline void closeSDlog() {}
 
 void Filesys_setup();
 
+#if defined(FILESYS)
 bool getline(File &infile, char *buf, int limit);
 
 uint32_t FILESYS_free_kb();    // on SPIFFS (T-Beam) or FATFS (T-Echo)
 uint32_t IGCFS_free_kb();      // on SD (T-Beam) or FATFS (T-Echo)
+#else
+class NoFile {
+public:
+  operator bool() const { return false; }
+  void close() {}
+  void flush() {}
+  size_t print(const char *) { return 0; }
+  size_t print(const uint8_t *) { return 0; }
+  size_t write(const uint8_t *, size_t) { return 0; }
+};
+
+static inline uint32_t FILESYS_free_kb() { return 0; }
+static inline uint32_t IGCFS_free_kb() { return 0; }
+static const bool FS_is_mounted = false;
+static const bool IGCFS_is_mounted = false;
+#endif
 
 #endif // FILESYS_H

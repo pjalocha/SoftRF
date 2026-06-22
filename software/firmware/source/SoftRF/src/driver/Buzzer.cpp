@@ -18,7 +18,7 @@
 
 #include "../system/SoC.h"
 
-#if defined(EXCLUDE_BUZZER)
+#if defined(EXCLUDE_BUZZER) || defined(EXCLUDE_SOUND)
 void  Buzzer_setup()       {}
 bool  Buzzer_Notify(int8_t level, bool multi_alarm) {return false;}
 void  Buzzer_loop()        {}
@@ -277,4 +277,4 @@ void Buzzer_fini(void)
   toneAC(440, volume, 250, 0);
 }
 
-#endif  /* EXCLUDE_BUZZER */
+#endif  /* EXCLUDE_BUZZER || EXCLUDE_SOUND */

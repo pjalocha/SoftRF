@@ -22,6 +22,10 @@
 #include <toneAC.h>
 #endif
 
+#if !defined(ESP32) && !defined(ARDUINO_ARCH_NRF52)
+static inline void toneAC(unsigned long, uint8_t = 10, unsigned long = 0, uint8_t = 0) {}
+#endif
+
 #include "system/SoC.h"
 #include "TrafficHelper.h"
 #include "Wind.h"

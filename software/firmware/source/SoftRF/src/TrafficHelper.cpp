@@ -50,6 +50,9 @@
 //#include "SPIFFS.h"
 File AlarmLog;
 bool AlarmLogOpen = false;
+#else
+NoFile AlarmLog;
+bool AlarmLogOpen = false;
 #endif
 
 void startlogs()
@@ -1123,6 +1126,7 @@ static void zero_range_stats()
         rssi_mean,rssi_mean_square_deviation   - n=sum of range n's
 */
 // try and load range stats from file
+#if defined(FILESYS)
 static bool load_range_stats()
 {
     zero_range_stats();
@@ -1181,6 +1185,13 @@ static bool load_range_stats()
     statsfile.close();
     return true;
 }
+#else
+static bool load_range_stats()
+{
+    zero_range_stats();
+    return false;
+}
+#endif
 
 void sample_range(container_t *fop)
 {
@@ -1206,6 +1217,9 @@ void sample_range(container_t *fop)
 // this is called after landing
 void save_range_stats()
 {
+#if !defined(FILESYS)
+    return;
+#else
     if (newrssi_n == 0)  // no new data
         return;
     FILESYS.remove("/oldrange.txt");
@@ -1250,6 +1264,7 @@ void save_range_stats()
     FlightLogComment(buf, true);   // - it will prepend LSRF, resulting in, e.g., LSRFAN,...
     statsfile.close();
     load_range_stats();            // in case of another flight
+#endif
 }
 
 /* relay landed-out or ADS-B traffic if we are airborne */

@@ -1686,7 +1686,7 @@ static gnss_id_t probe_baud_rates()
     gnss_id_t rval = GNSS_MODULE_NONE;
     for (int i=BAUD_115200; i>=BAUD_9600; i--) {
         unsigned long baudrate = baudrates[i];
-#if defined(ARDUINO_ARCH_NRF52)
+#if defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_ARCH_STM32)
         Serial_GNSS_In.flush();
         Serial_GNSS_In.end();
         SoC->swSer_begin(baudrate);   // because updateBaudRate() not supported

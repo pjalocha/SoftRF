@@ -26,7 +26,7 @@
 #include "../platform/ESP32.h"
 //#include "../platform/RPi.h"
 //#include "../platform/CC13XX.h"
-//#include "../platform/STM32.h"
+#include "../platform/STM32.h"
 //#include "../platform/PSoC4.h"
 #include "../platform/nRF52.h"
 //#include "../platform/LPC43.h"

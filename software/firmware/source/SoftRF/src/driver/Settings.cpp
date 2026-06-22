@@ -1107,6 +1107,16 @@ void save_settings_to_file(bool reboot)
 
 #endif /* FILESYS */
 
+#if !defined(FILESYS)
+void save_settings_to_file(bool reboot)
+{
+  save_settings_to_EEPROM(false);
+  if (reboot) {
+    SoC->reset();
+  }
+}
+#endif
+
 int find_setting(const char *p, bool sh)
 {
     if (! sh) {
@@ -1302,6 +1312,13 @@ bool load_settings_from_file()
 }
 
 #endif /* FILESYS */
+
+#if !defined(FILESYS)
+bool load_settings_from_file()
+{
+  return false;
+}
+#endif
 
 bool load_settings()
 {

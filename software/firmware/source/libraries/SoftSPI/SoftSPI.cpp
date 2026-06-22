@@ -4,6 +4,8 @@
 SoftSPI::SoftSPI(uint8_t mosi, uint8_t miso, uint8_t sck) : SPIClass(NRF_SPIM0, 0, 0, 0)
 #elif defined(ARDUINO_ARCH_ESP32)
 SoftSPI::SoftSPI(uint8_t mosi, uint8_t miso, uint8_t sck) : SPIClass()
+#elif defined(ARDUINO_ARCH_STM32)
+SoftSPI::SoftSPI(uint8_t mosi, uint8_t miso, uint8_t sck) : SPIClass(mosi, miso, sck)
 #else
 #error "This build architecture is not supported!"
 #endif /* ARDUINO_ARCH_NRF52 || ARDUINO_ARCH_ESP32 */

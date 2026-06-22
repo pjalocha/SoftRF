@@ -46,7 +46,9 @@
 #error "PWR configuration is missing. Check flag HAL_PWR_MODULE_ENABLED in variants/board_name/stm32yzxx_hal_conf.h"
 #endif
 
+#if !defined(EXCLUDE_STM32_RTC_WAKEUP)
 #include "STM32RTC.h"
+#endif
 #include "Wire.h"
 
 typedef void (*voidFuncPtrVoid)( void ) ;
@@ -80,7 +82,9 @@ public:
   void attachInterruptWakeup(uint32_t pin, voidFuncPtrVoid callback, uint32_t mode);
 
   void enableWakeupFrom(HardwareSerial *serial, voidFuncPtrVoid callback);
+#if !defined(EXCLUDE_STM32_RTC_WAKEUP)
   void enableWakeupFrom(STM32RTC *rtc, voidFuncPtr callback, void *data = NULL);
+#endif
 
 private:
   enum LP_Mode: uint8_t

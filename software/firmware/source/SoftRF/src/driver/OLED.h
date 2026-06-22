@@ -27,7 +27,7 @@ extern U8X8 *u8x8;
 
 #define isTimeToOLED()          (millis() - OLEDTimeMarker > 500)
 
-//byte OLED_setup(void);
+byte OLED_setup(void);
 void OLED_loop(void);
 void OLED_fini(int);
 void OLED_info1(void);

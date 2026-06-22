@@ -20,6 +20,7 @@
 #define TRAFFICHELPER_H
 
 #include "system/SoC.h"
+#include "driver/Filesys.h"
 
 /* for DISTANCE method: traffic beyond ALARM_ZONE_NONE is invisible */
 #define ALARM_ZONE_NONE       15000 /* zone range is 1500m <-> 15000m */
@@ -119,11 +120,13 @@ extern int8_t maxrssi;
 
 extern const char *Aircraft_Type[];
 
-//#if defined(ESP32)
+#if defined(FILESYS)
 extern File AlarmLog;
+#else
+extern NoFile AlarmLog;
+#endif
 extern bool AlarmLogOpen;
 void startlogs(void);
 void stoplogs(void);
-//#endif
 
 #endif /* TRAFFICHELPER_H */

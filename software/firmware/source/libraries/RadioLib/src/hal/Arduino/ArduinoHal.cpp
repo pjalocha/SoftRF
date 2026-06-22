@@ -2,6 +2,10 @@
 
 #if defined(RADIOLIB_BUILD_ARDUINO)
 
+#if defined(ARDUINO_ARCH_STM32) && defined(DWT_BASE)
+#include <dwt.h>
+#endif
+
 ArduinoHal::ArduinoHal(): RadioLibHal(INPUT, OUTPUT, LOW, HIGH, RISING, FALLING), spi(&RADIOLIB_DEFAULT_SPI), initInterface(true) {}
 
 ArduinoHal::ArduinoHal(SPIClass& spi, SPISettings spiSettings): RadioLibHal(INPUT, OUTPUT, LOW, HIGH, RISING, FALLING), spi(&spi), spiSettings(spiSettings) {}
@@ -10,7 +14,7 @@ void ArduinoHal::init() {
   if(initInterface) {
     spiBegin();
   }
-  #if defined(ARDUINO_ARCH_STM32)
+  #if defined(ARDUINO_ARCH_STM32) && defined(DWT_BASE)
     dwt_init();
   #endif
 }

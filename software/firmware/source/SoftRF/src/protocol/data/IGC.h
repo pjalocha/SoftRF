@@ -28,6 +28,25 @@ extern char FlightLogPath[];
 extern char *PSRAMbuf;
 extern size_t PSRAMbufUsed;
 
+#else
+
+static const bool FlightLogOpen = false;
+
+static inline void makeLogNameDate(char *) {}
+static inline void FlightLog_setup() {}
+static inline void openFlightLog() {}
+static inline size_t PSRAMavailable() { return 0; }
+static inline void clearPSRAMlog() {}
+static inline void suspendFlightLog() {}
+static inline bool decompressfile(char *) { return false; }
+static inline void resumeFlightLog() {}
+static inline void logFlightPosition() {}
+static inline void completeFlightLog() {}
+static inline void closeFlightLog() {}
+static inline const char *FlightLogStatus() { return "N/A"; }
+static inline void FlightLogComment(const char *, bool = false) {}
+static inline void MD5_test() {}
+
 #endif
 
 #endif

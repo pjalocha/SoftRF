@@ -40,6 +40,8 @@
 #include "../../driver/EPD.h"
 #endif
 
+#if defined(IGCFILESYS)
+
 #if defined(ESP32)
 char *PSRAMbuf = NULL;
 char *PSRAMbuf2 = NULL;
@@ -1376,3 +1378,4 @@ void MD5_test()
     test_final(md5_d);
 }
 
+#endif /* IGCFILESYS */

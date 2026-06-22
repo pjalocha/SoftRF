@@ -242,7 +242,7 @@ void LED_loop() {
     }
   }
 
-#else  // nRF52
+#elif defined(ARDUINO_ARCH_NRF52)
   if (status_LED == SOC_UNUSED_PIN)
       return;
 
@@ -441,6 +441,17 @@ void LED_loop() {
       } else {
           digitalWrite(SOC_GPIO_LED_T1000_GREEN, HIGH);   // LED_STATE_ON = HIGH
       }
+  }
+#else
+  if (status_LED == SOC_UNUSED_PIN)
+      return;
+
+  if (Battery_voltage() <= Battery_threshold() ) {
+      digitalWrite(status_LED, (millis() & 0x0200)? HIGH : LED_STATE_ON);
+  } else if (! isValidFix()) {
+      digitalWrite(status_LED, (millis() & 0x080)? HIGH : LED_STATE_ON);
+  } else {
+      digitalWrite(status_LED, LED_STATE_ON);
   }
 #endif
 }

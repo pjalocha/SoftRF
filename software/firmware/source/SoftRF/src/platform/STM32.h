@@ -24,7 +24,8 @@
 #include "stm32yyxx_ll_adc.h"
 
 /* Maximum of tracked flying objects is now SoC-specific constant */
-#define MAX_TRACKING_OBJECTS    8
+#define MAX_TRACKING_OBJECTS    6
+#define MAX_NMEA_OBJECTS        4
 
 #define DEFAULT_SOFTRF_MODEL    SOFTRF_MODEL_RETRO
 
@@ -37,7 +38,6 @@
 #define uni_Color(r,g,b)        strip.Color(r,g,b)
 #define color_t                 uint32_t
 
-#define yield()                 ({ })
 #define snprintf_P              snprintf
 #define EEPROM_commit()         {}
 
@@ -109,6 +109,8 @@ typedef struct stm32_backup_struct {
 #if defined(ARDUINO_NUCLEO_L073RZ)
 
 #define swSer                 Serial4
+#define Serial_GNSS_In        swSer
+#define Serial_GNSS_Out       Serial_GNSS_In
 #define UATSerial             Serial2  /* PA3, PA2 */
 
 /* S76G GNSS is operating at 115200 baud (by default) */
@@ -214,11 +216,11 @@ typedef struct stm32_backup_struct {
 #define USE_OLED                 //  +3.5 kb
 //#define EXCLUDE_OLED_049
 //#define EXCLUDE_OLED_BARO_PAGE
-#define USE_NMEA_CFG             //  +2.5 kb
+//#define USE_NMEA_CFG             //  +2.5 kb
 #define EXCLUDE_MPL3115A2        //  -  1 kb
 #define EXCLUDE_NRF905           //  -  2 kb
 #define EXCLUDE_EGM96            //  - 16 kb
-#define USE_SERIAL_DEEP_SLEEP    //  + 12 kb
+//#define USE_SERIAL_DEEP_SLEEP    //  + 12 kb
 //#define USE_BASICMAC           //  +  7 kb
 #define EXCLUDE_LED_RING         //  -    kb
 #define EXCLUDE_SOUND
@@ -239,6 +241,8 @@ typedef struct stm32_backup_struct {
 #elif defined(ARDUINO_BLUEPILL_F103CB)
 
 #define swSer                 Serial2
+#define Serial_GNSS_In        swSer
+#define Serial_GNSS_Out       Serial_GNSS_In
 #define UATSerial             Serial3
 
 #define SOC_ADC_VOLTAGE_DIV   1

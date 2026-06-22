@@ -731,42 +731,42 @@ void update_crc8(uint8_t *crc, uint8_t m)
 // Pawel's code from OGN library adsl.h:
 
 // pass a single byte through the CRC polynomial
-static uint32_t adsl_PolyPass(uint32_t CRC, uint8_t Byte)
+static uint32_t adsl_PolyPass(uint32_t crc, uint8_t Byte)
 {
     const uint32_t Poly = 0xFFFA0480;
-    CRC |= Byte;
+    crc |= Byte;
     for(uint8_t Bit=0; Bit<8; Bit++)
-    { 
-        if(CRC & 0x80000000)
-            CRC ^= Poly;
-        CRC<<=1; 
+    {
+        if(crc & 0x80000000)
+            crc ^= Poly;
+        crc<<=1;
     }
-    return CRC;
+    return crc;
 }
 
 // run over data bytes and the three CRC bytes
 static uint32_t adsl_check_slow(const uint8_t *Byte, uint8_t Bytes)
 {
-    uint32_t CRC = 0;
+    uint32_t crc = 0;
     for(uint8_t Idx=0; Idx<Bytes; Idx++)
     {
-      CRC = adsl_PolyPass(CRC, Byte[Idx]);
+      crc = adsl_PolyPass(crc, Byte[Idx]);
     }
-    return CRC>>8;      // should be all zero for a correct packet
+    return crc>>8;      // should be all zero for a correct packet
 }
 
 // calculate PI for the given packet data excluding the three CRC bytes
 static uint32_t adsl_calc_slow(const uint8_t *Byte, uint8_t Bytes)
 {
-    uint32_t CRC = 0;
+    uint32_t crc = 0;
     for(uint8_t Idx=0; Idx<Bytes; Idx++)
     {
-        CRC = adsl_PolyPass(CRC, Byte[Idx]);
+        crc = adsl_PolyPass(crc, Byte[Idx]);
     }
-    CRC = adsl_PolyPass(CRC, 0);
-    CRC = adsl_PolyPass(CRC, 0);
-    CRC = adsl_PolyPass(CRC, 0);
-    return CRC>>8;
+    crc = adsl_PolyPass(crc, 0);
+    crc = adsl_PolyPass(crc, 0);
+    crc = adsl_PolyPass(crc, 0);
+    return crc>>8;
 }
 
 // initialize a lookup table for faster calculation later
@@ -780,18 +780,18 @@ static void init_adsl_tab()
     }
 
     for (uint32_t i=0; i<256; i++) {
-        uint32_t CRC = (i << 24);
+        uint32_t crc = (i << 24);
 #if 0
         const uint32_t Poly = 0xFFFA0480;
         for (uint8_t Bit=0; Bit<8; Bit++) {
-            if(CRC & 0x80000000)
-                CRC ^= Poly;
-            CRC <<= 1;
+            if(crc & 0x80000000)
+                crc ^= Poly;
+            crc <<= 1;
         }
 #else
-        CRC = adsl_PolyPass(CRC, (uint8_t) 0);
+        crc = adsl_PolyPass(crc, (uint8_t) 0);
 #endif
-        crc_tabadsl[i] = CRC;
+        crc_tabadsl[i] = crc;
         yield();
     }
 
@@ -806,15 +806,15 @@ uint32_t check_adsl_crc(const uint8_t *Byte, uint8_t Bytes)
     if (crc_tabadsl_init == 2)                  // init failed to malloc() the table
         return adsl_check_slow(Byte, Bytes);    // use the slow non-table method
 
-    uint32_t CRC = 0;
+    uint32_t crc = 0;
     for(int Idx=0; Idx<Bytes; Idx++)
     {
-        uint8_t topbyte = ((CRC >> 24) & 0xFF);
-        CRC |= Byte[Idx];
-        CRC <<= 8;
-        CRC ^= crc_tabadsl[topbyte];
+        uint8_t topbyte = ((crc >> 24) & 0xFF);
+        crc |= Byte[Idx];
+        crc <<= 8;
+        crc ^= crc_tabadsl[topbyte];
     }
-    return CRC>>8;      // should be all zero for a correct packet
+    return crc>>8;      // should be all zero for a correct packet
 }
 
 uint32_t calc_adsl_crc(const uint8_t *Byte, uint8_t Bytes)
@@ -825,24 +825,24 @@ uint32_t calc_adsl_crc(const uint8_t *Byte, uint8_t Bytes)
     if (crc_tabadsl_init == 2)                  // init failed to malloc() the table
         return adsl_calc_slow(Byte, Bytes);     // use the slow non-table method
 
-    uint32_t CRC = 0;
+    uint32_t crc = 0;
     uint8_t topbyte;
     for(int Idx=0; Idx<Bytes; Idx++)
     {
-        topbyte = ((CRC >> 24) & 0xFF);
-        CRC |= Byte[Idx];
-        CRC <<= 8;
-        CRC ^= crc_tabadsl[topbyte];
+        topbyte = ((crc >> 24) & 0xFF);
+        crc |= Byte[Idx];
+        crc <<= 8;
+        crc ^= crc_tabadsl[topbyte];
     }
     // continue to update CRC for 3 more zero-bytes:
-    topbyte = ((CRC >> 24) & 0xFF);
-    CRC <<= 8;
-    CRC ^= crc_tabadsl[topbyte];
-    topbyte = ((CRC >> 24) & 0xFF);
-    CRC <<= 8;
-    CRC ^= crc_tabadsl[topbyte];
-    topbyte = ((CRC >> 24) & 0xFF);
-    CRC <<= 8;
-    CRC ^= crc_tabadsl[topbyte];
-    return CRC>>8;
+    topbyte = ((crc >> 24) & 0xFF);
+    crc <<= 8;
+    crc ^= crc_tabadsl[topbyte];
+    topbyte = ((crc >> 24) & 0xFF);
+    crc <<= 8;
+    crc ^= crc_tabadsl[topbyte];
+    topbyte = ((crc >> 24) & 0xFF);
+    crc <<= 8;
+    crc ^= crc_tabadsl[topbyte];
+    return crc>>8;
 }

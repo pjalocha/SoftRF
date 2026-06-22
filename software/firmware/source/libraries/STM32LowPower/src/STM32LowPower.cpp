@@ -55,7 +55,6 @@ STM32LowPower::STM32LowPower()
   */
 void STM32LowPower::begin(void)
 {
-  LowPower_init();
   _configured = true;
 }
 
@@ -70,7 +69,7 @@ void STM32LowPower::idle(uint32_t millis)
   if((millis > 0) || _rtc_wakeup) {
     programRtcWakeUp(millis, IDLE_MODE);
   }
-  LowPower_sleep(PWR_MAINREGULATOR_ON);
+  HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
 }
 
 /**
@@ -84,7 +83,7 @@ void STM32LowPower::sleep(uint32_t millis)
   if((millis > 0) || _rtc_wakeup) {
     programRtcWakeUp(millis, SLEEP_MODE);
   }
-  LowPower_sleep(PWR_LOWPOWERREGULATOR_ON);
+  HAL_PWR_EnterSLEEPMode(PWR_LOWPOWERREGULATOR_ON, PWR_SLEEPENTRY_WFI);
 }
 
 /**
@@ -98,7 +97,7 @@ void STM32LowPower::deepSleep(uint32_t millis)
   if((millis > 0) || _rtc_wakeup) {
     programRtcWakeUp(millis, DEEP_SLEEP_MODE);
   }
-  LowPower_stop(_serial);
+  HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
 }
 
 /**
@@ -112,7 +111,11 @@ void STM32LowPower::shutdown(uint32_t millis)
   if((millis > 0) || _rtc_wakeup) {
     programRtcWakeUp(millis, SHUTDOWN_MODE);
   }
-  LowPower_shutdown();
+#if defined(PWR_SHUTDOWNENTRY_WFI)
+  HAL_PWREx_EnterSHUTDOWNMode();
+#else
+  HAL_PWR_EnterSTANDBYMode();
+#endif
 }
 
 /**
@@ -127,9 +130,6 @@ void STM32LowPower::attachInterruptWakeup(uint32_t pin, voidFuncPtrVoid callback
 {
   // All GPIO for idle (smt32 sleep) and sleep (stm32 stop)
   attachInterrupt(pin, callback, mode);
-
-  // If Gpio is a Wake up pin activate it for deepSleep (standby stm32) and shutdown
-  LowPower_EnableWakeUpPin(pin, mode);
 }
 
 /**
@@ -145,7 +145,7 @@ void STM32LowPower::enableWakeupFrom(HardwareSerial *serial, voidFuncPtrVoid cal
     _serial = &(serial->_serial);
     // Reconfigure serial for low power mode (using HSI as clock source)
     serial->configForLowPower();
-    LowPower_EnableWakeUpUart(_serial, callback);
+    (void) callback;
   }
 }
 
@@ -157,6 +157,7 @@ void STM32LowPower::enableWakeupFrom(HardwareSerial *serial, voidFuncPtrVoid cal
   * @param  data: optional pointer to callback data parameters (default NULL).
   * @retval None
   */
+#if !defined(EXCLUDE_STM32_RTC_WAKEUP)
 void STM32LowPower::enableWakeupFrom(STM32RTC *rtc, voidFuncPtr callback, void *data)
 {
   if(rtc == NULL) {
@@ -165,6 +166,7 @@ void STM32LowPower::enableWakeupFrom(STM32RTC *rtc, voidFuncPtr callback, void *
   _rtc_wakeup = true;
   rtc->attachInterrupt(callback, data);
 }
+#endif
 
 /**
   * @brief  Configure the RTC alarm
@@ -174,6 +176,7 @@ void STM32LowPower::enableWakeupFrom(STM32RTC *rtc, voidFuncPtr callback, void *
   */
 void STM32LowPower::programRtcWakeUp(uint32_t millis, LP_Mode lp_mode)
 {
+#if !defined(EXCLUDE_STM32_RTC_WAKEUP)
   int epoc;
   uint32_t sec;
   STM32RTC& rtc = STM32RTC::getInstance();
@@ -211,4 +214,8 @@ void STM32LowPower::programRtcWakeUp(uint32_t millis, LP_Mode lp_mode)
     epoc = rtc.getEpoch();
     rtc.setAlarmEpoch( epoc + sec );
   }
+#else
+  (void) millis;
+  (void) lp_mode;
+#endif
 }

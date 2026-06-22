@@ -11,6 +11,7 @@
 // the File object holds its own copy of the file position, thus here
 // must be passed by reference or will always read the first line again!
 
+#if defined(FILESYS)
 bool getline(File &infile, char *buf, int limit)
 {
     char *cp, *tp;
@@ -32,6 +33,7 @@ bool getline(File &infile, char *buf, int limit)
     *cp = '\0';
     return (cp != buf);     // read something
 }
+#endif
 
 #if defined(ESP32)
 
@@ -331,6 +333,10 @@ Serial.println(bytes);
 // flight log also stored in FATFS
 uint32_t IGCFS_free_kb() { return FILESYS_free_kb(); }
 
+#endif
+
+#if !defined(ESP32) && !defined(ARDUINO_ARCH_NRF52)
+void Filesys_setup() {}
 #endif
 
 #if defined(FILESYS)
