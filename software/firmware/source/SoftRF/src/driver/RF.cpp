@@ -1633,9 +1633,9 @@ void set_protocol_for_slot()
               protocol_encode = &legacy_encode;
               current_TX_protocol = RF_PROTOCOL_LATEST;
           } else if (abh_chan == ogn_chan) {
-              curr_tx_protocol_ptr = &ogntp_proto_desc;
-              protocol_encode = &ogntp_encode;
-              current_TX_protocol = RF_PROTOCOL_OGNTP;
+              curr_tx_protocol_ptr = &adsl_proto_desc;
+              protocol_encode = &adsl_encode;
+              current_TX_protocol = RF_PROTOCOL_ADSL;
           } else {
               curr_tx_protocol_ptr = &adsl_proto_desc;
               protocol_encode = &adsl_encode;
@@ -1692,19 +1692,14 @@ void set_protocol_for_slot()
             rx_combined = (curr_rx_protocol_ptr == &flr_adsl_proto_desc) ?
                           RF_RX_COMBINED_FLR_ADSL : RF_RX_COMBINED_NONE;
         } else if (abh_chan == ogn_chan) {
-            if (settings->flr_adsl) {
-                curr_rx_protocol_ptr = &ogn_adsl_proto_desc;
-                protocol_decode = &ogn_adsl_decode;
-                rx_combined = RF_RX_COMBINED_OGN_ADSL;
-            } else {
-                curr_rx_protocol_ptr = &ogntp_proto_desc;
-                protocol_decode = &ogntp_decode;
-                rx_combined = RF_RX_COMBINED_NONE;
-            }
-            curr_tx_protocol_ptr = &ogntp_proto_desc;
-            protocol_encode = &ogntp_encode;
+            curr_rx_protocol_ptr = &ogn_adsl_proto_desc;
+            protocol_decode = &ogn_adsl_decode;
+            rx_combined = RF_RX_COMBINED_OGN_ADSL;
+            curr_tx_protocol_ptr = &adsl_proto_desc;
+            protocol_encode = &adsl_encode;
             current_RX_protocol = RF_PROTOCOL_OGNTP;
-            current_TX_protocol = RF_PROTOCOL_OGNTP;
+            current_TX_protocol = RF_PROTOCOL_ADSL;
+            RF_tx_chan_override = abh_chan;
         } else {
             curr_rx_protocol_ptr = &adsl_proto_desc;
             curr_tx_protocol_ptr = &adsl_proto_desc;
