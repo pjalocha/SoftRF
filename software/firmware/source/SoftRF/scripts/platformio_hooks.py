@@ -1,11 +1,16 @@
 from pathlib import Path
 import subprocess
+import struct
+import zlib
 
 Import("env")
 
 project_dir = Path(env.subst("$PROJECT_DIR"))
 libraries_dir = project_dir.parent / "libraries"
 pioenv = env.subst("$PIOENV").lower()
+
+if pioenv in ("tmotion", "t-motion"):
+    env.BoardConfig().update("build.hwids", [["0x0483", "0x5740"]])
 
 if pioenv in ("techo", "t-echo"):
     env.BuildSources(
@@ -63,5 +68,46 @@ def build_uf2(source, target, env):
     print(f"UF2: wrote {uf2_path}")
 
 
+def build_dfuse(source, target, env):
+    build_dir = Path(env.subst("$BUILD_DIR"))
+    bin_path = build_dir / "firmware.bin"
+    dfu_path = build_dir / "firmware.dfu"
+    flash_base = 0x08000000
+
+    if not bin_path.exists():
+        print(f"DFU: missing {bin_path}")
+        return
+
+    firmware = bin_path.read_bytes()
+    if len(firmware) < 8:
+        raise ValueError(f"DFU: {bin_path} is too short")
+
+    stack, reset = struct.unpack_from("<II", firmware)
+    if not (0x20000000 <= stack <= 0x20005000):
+        raise ValueError(f"DFU: invalid initial stack pointer 0x{stack:08X}")
+    if not (flash_base <= (reset & ~1) < flash_base + 0x30000) or not (reset & 1):
+        raise ValueError(f"DFU: invalid reset vector 0x{reset:08X}")
+
+    target_name = b"ST..."
+    target_prefix = (
+        b"Target"
+        + struct.pack("<BB", 0, 1)
+        + target_name.ljust(255, b"\0")
+        + struct.pack("<II", len(firmware) + 8, 1)
+    )
+    element = struct.pack("<II", flash_base, len(firmware)) + firmware
+
+    suffix_without_crc = struct.pack("<HHHH3sB", 0x0000, 0xDF11, 0x0483, 0x011A, b"UFD", 16)
+    image_size = 11 + len(target_prefix) + len(element) + len(suffix_without_crc) + 4
+    prefix = b"DfuSe" + struct.pack("<BIB", 1, image_size, 1)
+
+    payload = prefix + target_prefix + element + suffix_without_crc
+    crc = zlib.crc32(payload) ^ 0xFFFFFFFF
+    dfu_path.write_bytes(payload + struct.pack("<I", crc))
+    print(f"DFU: wrote {dfu_path} ({len(firmware)} bytes at 0x{flash_base:08X})")
+
+
 if pioenv in ("techo", "t-echo"):
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", build_uf2)
+elif pioenv in ("tmotion", "t-motion"):
+    env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", build_dfuse)

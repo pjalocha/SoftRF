@@ -571,10 +571,10 @@ Serial.println("Tentative GNSS fix");
         GNSSTimeMarker = millis();
         float lat = gnss.location.lat();
         float lon = gnss.location.lng();
-        Serial.printf("Stable GNSS fix:\r\n\
-            lat/lon: %.5f %.5f\r\n\
-            date: %d %d %d\r\n\
-            time: %d %d %d\r\n",
+        Serial.printf("Stable GNSS fix:\r\n"
+            "lat/lon: %.5f %.5f\r\n"
+            "date: %d %d %d\r\n"
+            "time: %d %d %d\r\n",
             lat, lon,
             gnss.date.year(), gnss.date.month(), gnss.date.day(),
             gnss.time.hour(), gnss.time.minute(), gnss.time.second());
