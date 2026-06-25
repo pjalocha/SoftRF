@@ -81,6 +81,7 @@ enum nRF52_board_id {
   NRF52_ELECROW_TN_M1,
   NRF52_ELECROW_TN_M3,
   NRF52_ELECROW_OTHER,          // older M1 or M3 with "ELECROW"
+  NRF52_SEEED_WIO_TRACKER_L1,   // Wio-Tracker 2026
   NRF52_UNSUPPORTED
 };
 
@@ -492,6 +493,50 @@ struct rst_info {
 #define SOC_GPIO_PIN_M3_ACC_EN    _PINNUM(0,  2) // P0.02 active HIGH ?
 #define SOC_GPIO_PIN_M3_TEMP_EN   _PINNUM(0,  3) // P0.03 active HIGH
 
+/************** Seeed Wio Tracker L1 / L1 Pro section *************/
+
+/* L76K GNSS */
+#define SOC_GPIO_PIN_GNSS_WIO_RX      _PINNUM(0, 26) // nRF RX, GNSS TX
+#define SOC_GPIO_PIN_GNSS_WIO_TX      _PINNUM(0, 27) // nRF TX, GNSS RX
+#define SOC_GPIO_PIN_GNSS_WIO_PPS     SOC_UNUSED_PIN
+#define SOC_GPIO_PIN_GNSS_WIO_WKE     SOC_UNUSED_PIN
+#define SOC_GPIO_PIN_GNSS_WIO_RST     SOC_UNUSED_PIN
+
+/* SX1262 SPI */
+#define SOC_GPIO_PIN_WIO_SCK          _PINNUM(0, 30)
+#define SOC_GPIO_PIN_WIO_MISO         _PINNUM(0, 3)
+#define SOC_GPIO_PIN_WIO_MOSI         _PINNUM(0, 28)
+#define SOC_GPIO_PIN_WIO_SS           _PINNUM(1, 14)
+
+/* SX1262 control */
+#define SOC_GPIO_PIN_WIO_DIO1         _PINNUM(0, 7)
+#define SOC_GPIO_PIN_WIO_BUSY         _PINNUM(1, 10)
+#define SOC_GPIO_PIN_WIO_RST          _PINNUM(1, 7)
+#define SOC_GPIO_PIN_WIO_RXEN         _PINNUM(1, 8)
+
+/* OLED I2C */
+#define SOC_GPIO_PIN_WIO_SCL          _PINNUM(0, 5)
+#define SOC_GPIO_PIN_WIO_SDA          _PINNUM(0, 6)
+
+/* UI */
+#define SOC_GPIO_LED_WIO_GREEN        _PINNUM(1, 1)  // active high
+#define SOC_GPIO_PIN_WIO_BUTTON       _PINNUM(0, 8)  // active low
+
+/* Trackball / joystick */
+#define SOC_GPIO_PIN_WIO_TB_UP        _PINNUM(1, 4)
+#define SOC_GPIO_PIN_WIO_TB_DOWN      _PINNUM(0, 12)
+#define SOC_GPIO_PIN_WIO_TB_LEFT      _PINNUM(0, 11)
+#define SOC_GPIO_PIN_WIO_TB_RIGHT     _PINNUM(1, 3)
+#define SOC_GPIO_PIN_WIO_TB_PRESS     _PINNUM(1, 5)
+
+/* Battery */
+#define SOC_GPIO_PIN_WIO_BATTERY_EN   _PINNUM(0, 4)
+#define SOC_GPIO_PIN_WIO_BATTERY      _PINNUM(0, 31) // AIN7
+#define SOC_ADC_WIO_VOLTAGE_DIV       (2.0F)         // verify on real board
+
+/* Buzzer */
+#define SOC_GPIO_PIN_WIO_BUZZER       _PINNUM(1, 0)
+
 /************** general section *************/
 
 //#define SOC_GPIO_PIN_GNSS_PPS _PINNUM(1, 4) // P1.04
@@ -558,9 +603,10 @@ struct rst_info {
 
 /* buttons */
 #define SOC_GPIO_PIN_PCA10059_BUTTON    _PINNUM(1,  6) // P1.06
-#define SOC_GPIO_PIN_BUTTON   (nRF52_board == NRF52_NORDIC_PCA10059 ? \
-                               SOC_GPIO_PIN_PCA10059_BUTTON :         \
-                               SOC_GPIO_PIN_TECHO_REV_0_BUTTON)
+#define SOC_GPIO_PIN_BUTTON \
+  (nRF52_board == NRF52_SEEED_WIO_TRACKER_L1 ? SOC_GPIO_PIN_WIO_BUTTON : \
+   nRF52_board == NRF52_NORDIC_PCA10059 ? SOC_GPIO_PIN_PCA10059_BUTTON : \
+   SOC_GPIO_PIN_TECHO_REV_0_BUTTON)
 
 #define EXCLUDE_WIFI
 #define EXCLUDE_ETHERNET
@@ -678,14 +724,16 @@ void nRF52_charge_mode();
 bool nRF52_onExternalPower();
 
 #if defined(USE_PWM_SOUND)
-#define SOC_GPIO_PIN_BUZZER   (nRF52_board == NRF52_SEEED_T1000E  ? SOC_GPIO_PIN_T1000_BUZZER : \
-                               nRF52_board == NRF52_ELECROW_TN_M1 ? SOC_GPIO_PIN_M1_BUZZER    : \
-                               nRF52_board == NRF52_ELECROW_TN_M3 ? SOC_GPIO_PIN_M3_BUZZER    : \
-                               nRF52_board == NRF52_LILYGO_TECHO_PLUS ? SOC_GPIO_PIN_TECHO_BUZZER : \
-                               hw_info.rf != RF_IC_SX1262 ? SOC_UNUSED_PIN           : \
-                               hw_info.revision == 1 ? SOC_GPIO_PIN_TECHO_REV_1_DIO0 : \
-                               hw_info.revision == 2 ? SOC_GPIO_PIN_TECHO_REV_2_DIO0 : \
-                               SOC_UNUSED_PIN)
+#define SOC_GPIO_PIN_BUZZER \
+  (nRF52_board == NRF52_SEEED_WIO_TRACKER_L1 ? SOC_GPIO_PIN_WIO_BUZZER : \
+   nRF52_board == NRF52_SEEED_T1000E ? SOC_GPIO_PIN_T1000_BUZZER : \
+   nRF52_board == NRF52_ELECROW_TN_M1 ? SOC_GPIO_PIN_M1_BUZZER : \
+   nRF52_board == NRF52_ELECROW_TN_M3 ? SOC_GPIO_PIN_M3_BUZZER : \
+   nRF52_board == NRF52_LILYGO_TECHO_PLUS ? SOC_GPIO_PIN_TECHO_BUZZER : \
+   hw_info.rf != RF_IC_SX1262 ? SOC_UNUSED_PIN : \
+   hw_info.revision == 1 ? SOC_GPIO_PIN_TECHO_REV_1_DIO0 : \
+   hw_info.revision == 2 ? SOC_GPIO_PIN_TECHO_REV_2_DIO0 : \
+   SOC_UNUSED_PIN)
 
 #define ALARM_TONE_HZ         2480 // seems to be the best value for 27 mm piezo buzzer
 #else
