@@ -843,6 +843,11 @@ if (NMEA_Source != DEST_NONE) {     // only external sources
 
 void NMEA_Outs(uint16_t nmeatype, const char *buf, unsigned int size, bool nl)
 {
+#if defined(TMOTION_COUNTERS_ONLY_TEST) && defined(ARDUINO_NUCLEO_L073RZ)
+    if (nmeatype != NMEA_OTHER)
+        return;
+#endif
+
     uint16_t genus  = (nmeatype & 0xFF00);
     uint8_t species = (uint8_t)(nmeatype & 0x00FF);
     if (species == 0)

@@ -105,7 +105,7 @@ static uint32_t bootCount __attribute__ ((section (".noinit")));
 static uint8_t gpregret = 0;
 static uint8_t gpregret2 = 0;
 
-static nRF52_board_id nRF52_board = NRF52_UNSUPPORTED;    /* default */
+nRF52_board_id nRF52_board = NRF52_UNSUPPORTED;    /* default */
 static nRF52_display_id nRF52_display = EP_UNKNOWN;
 
 const char *nRF52_Device_Manufacturer = SOFTRF_IDENT;
@@ -519,6 +519,9 @@ static void nRF52_setup()
                 nRF52_bl_check("T1000-E")     ? NRF52_SEEED_T1000E       :
                 nRF52_bl_check("ThinkNodeM1") ? NRF52_ELECROW_TN_M1      :
                 nRF52_bl_check("ThinkNodeM3") ? NRF52_ELECROW_TN_M3      :
+                nRF52_bl_check("WIOBOOT")     ? NRF52_SEEED_WIO_TRACKER_L1 :
+                nRF52_bl_check("Wio Tracker") ? NRF52_SEEED_WIO_TRACKER_L1 :
+                nRF52_bl_check("WIO_TRACKER") ? NRF52_SEEED_WIO_TRACKER_L1 :
                 nRF52_bl_check("ELECROWBOOT") ? NRF52_ELECROW_OTHER      :
                 nRF52_bl_check("NRF52BOOT")   ? NRF52_LILYGO_TECHO_REV_2 :
                 NRF52_UNSUPPORTED;
@@ -542,7 +545,20 @@ static void nRF52_setup()
     pinMode(SOC_GPIO_PIN_TECHO_REV_1_3V3_PWR,  INPUT_PULLUP);
   }
 
-  if (nRF52_board != NRF52_ELECROW_TN_M1 &&
+  if (nRF52_board == NRF52_UNSUPPORTED) {
+#if !defined(ARDUINO_ARCH_MBED) && !defined(ARDUINO_ARCH_ZEPHYR)
+    Wire.setPins(SOC_GPIO_PIN_WIO_SDA, SOC_GPIO_PIN_WIO_SCL);
+#endif
+    Wire.begin();
+    Wire.beginTransmission(0x3C); /* Wio Tracker OLED */
+    if (Wire.endTransmission() == 0) {
+      nRF52_board = NRF52_SEEED_WIO_TRACKER_L1;
+    }
+    Wire.end();
+  }
+
+  if (nRF52_board != NRF52_SEEED_WIO_TRACKER_L1 &&
+      nRF52_board != NRF52_ELECROW_TN_M1 &&
       nRF52_board != NRF52_ELECROW_TN_M3 &&
       nRF52_board != NRF52_LILYGO_TECHO_REV_0 &&
       nRF52_board != NRF52_LILYGO_TECHO_REV_1 &&
@@ -806,9 +822,18 @@ delay(150);
       pinMode(SOC_GPIO_PIN_M3_BUT_EN, INPUT_PULLUP);
   }
 
+  if (nRF52_board == NRF52_SEEED_WIO_TRACKER_L1) {
+      hw_info.model             = SOFTRF_MODEL_BADGE;
+      nRF52_Device_Manufacturer = "Seeed Studio";
+      nRF52_Device_Model        = "Wio Tracker";
+  }
+
 #if !defined(ARDUINO_ARCH_MBED) && !defined(ARDUINO_ARCH_ZEPHYR)
   switch (nRF52_board)
   {
+    case NRF52_SEEED_WIO_TRACKER_L1:
+      Wire.setPins(SOC_GPIO_PIN_WIO_SDA, SOC_GPIO_PIN_WIO_SCL);
+      break;
     case NRF52_SEEED_T1000E:
       Wire.setPins(SOC_GPIO_PIN_T1000_SDA, SOC_GPIO_PIN_T1000_SCL);
 #if !defined(EXCLUDE_IMU)
@@ -919,6 +944,7 @@ nRF52_WDT_fini();
       break;
     case NRF52_NORDIC_PCA10059:
     case NRF52_ELECROW_TN_M3:
+    case NRF52_SEEED_WIO_TRACKER_L1:
       // no SPI flash
     default:
       break;
@@ -1121,6 +1147,28 @@ nRF52_WDT_fini();
       hw_info.audio    = AUDIO_PWM;
       break;
 
+    case NRF52_SEEED_WIO_TRACKER_L1:
+
+      digitalWrite(SOC_GPIO_LED_WIO_GREEN, HIGH);    // on while booting
+      pinMode(SOC_GPIO_LED_WIO_GREEN, OUTPUT);
+
+      pinMode(SOC_GPIO_PIN_WIO_BUTTON, INPUT_PULLUP);
+
+      digitalWrite(SOC_GPIO_PIN_WIO_BATTERY_EN, HIGH);
+      pinMode(SOC_GPIO_PIN_WIO_BATTERY_EN, OUTPUT);
+
+      digitalWrite(SOC_GPIO_PIN_WIO_RXEN, HIGH);
+      pinMode(SOC_GPIO_PIN_WIO_RXEN, OUTPUT);
+
+      lmic_pins.nss    = SOC_GPIO_PIN_WIO_SS;
+      lmic_pins.rst    = SOC_GPIO_PIN_WIO_RST;
+      lmic_pins.busy   = SOC_GPIO_PIN_WIO_BUSY;
+      lmic_pins.dio[1] = SOC_GPIO_PIN_WIO_DIO1; /* for sx1262 */
+
+      hw_info.revision = 3; /* Unknown */
+      hw_info.audio    = AUDIO_PWM;
+      break;
+
     case NRF52_ELECROW_TN_M1:
 
       /* TBD */
@@ -1237,6 +1285,9 @@ nRF52_WDT_fini();
 #if defined(USE_TINYUSB)
   switch (nRF52_board)
   {
+    case NRF52_SEEED_WIO_TRACKER_L1:
+      /* Wio Tracker has no separate console UART in this mapping. */
+      break;
     case NRF52_SEEED_T1000E:
       Serial1.setPins(SOC_GPIO_PIN_CONS_T1000_RX, SOC_GPIO_PIN_CONS_T1000_TX);
 #if defined(EXCLUDE_WIFI)
@@ -1580,6 +1631,25 @@ static void nRF52_post_init()
       Serial.flush();
     }
 #endif
+
+  } else if (nRF52_board == NRF52_SEEED_WIO_TRACKER_L1) {
+
+    Serial.println();
+    Serial.println(F("Seeed Wio Tracker Power-on Self Test"));
+    Serial.println();
+    Serial.flush();
+
+    Serial.println(F("Built-in components:"));
+
+    Serial.print(F("RADIO   : "));
+    Serial.println(hw_info.rf    == RF_IC_SX1262     ? F("PASS") : F("FAIL"));
+    Serial.flush();
+    Serial.print(F("GNSS    : "));
+    Serial.println(hw_info.gnss  == GNSS_MODULE_AT65 ? F("PASS") : F("FAIL"));
+    Serial.flush();
+    Serial.print(F("FLASH   : "));
+    Serial.println(hw_info.storage == STORAGE_NONE    ? F("N/A") : F("PASS"));
+    Serial.flush();
 
   } else if (nRF52_board == NRF52_SEEED_T1000E) {
 
@@ -2128,6 +2198,24 @@ static void nRF52_fini(int reason)
 #endif
       break;
 
+    case NRF52_SEEED_WIO_TRACKER_L1:
+
+      digitalWrite(SOC_GPIO_LED_WIO_GREEN, LOW);
+      pinMode(SOC_GPIO_LED_WIO_GREEN, INPUT);
+      digitalWrite(SOC_GPIO_PIN_WIO_BATTERY_EN, LOW);
+      pinMode(SOC_GPIO_PIN_WIO_BATTERY_EN, INPUT);
+      digitalWrite(SOC_GPIO_PIN_WIO_RXEN, LOW);
+      pinMode(SOC_GPIO_PIN_WIO_RXEN, INPUT);
+
+      pinMode(SOC_GPIO_PIN_WIO_SS,   INPUT_PULLUP);
+      pinMode(SOC_GPIO_PIN_WIO_RST,  INPUT);
+      pinMode(SOC_GPIO_PIN_WIO_BUSY, INPUT);
+      pinMode(SOC_GPIO_PIN_WIO_DIO1, INPUT);
+      pinMode(SOC_GPIO_PIN_WIO_MOSI, INPUT);
+      pinMode(SOC_GPIO_PIN_WIO_MISO, INPUT);
+      pinMode(SOC_GPIO_PIN_WIO_SCK,  INPUT);
+      break;
+
     case NRF52_ELECROW_TN_M1:
 
       digitalWrite(SOC_GPIO_PIN_GNSS_M1_WKE, LOW);
@@ -2210,6 +2298,7 @@ if (reason != SOFTRF_SHUTDOWN_CHARGE) {
 }
 
   if (nRF52_board != NRF52_SEEED_T1000E &&
+      nRF52_board != NRF52_SEEED_WIO_TRACKER_L1 &&
       nRF52_board != NRF52_ELECROW_TN_M3) {
     pinMode(SOC_GPIO_PIN_SS, INPUT_PULLUP);
   }
@@ -2232,6 +2321,11 @@ if (reason != SOFTRF_SHUTDOWN_CHARGE) {
 
     case NRF52_ELECROW_TN_M3:
       mode_button_pin = SOC_GPIO_PIN_M3_BUTTON;
+      pinMode(mode_button_pin, INPUT_PULLUP);
+      break;
+
+    case NRF52_SEEED_WIO_TRACKER_L1:
+      mode_button_pin = SOC_GPIO_PIN_WIO_BUTTON;
       pinMode(mode_button_pin, INPUT_PULLUP);
       break;
 
@@ -2797,6 +2891,11 @@ static void nRF52_SPI_begin()
 #if !defined(ARDUINO_ARCH_MBED) && !defined(ARDUINO_ARCH_ZEPHYR)
   switch (nRF52_board)
   {
+    case NRF52_SEEED_WIO_TRACKER_L1:
+      SPI.setPins(SOC_GPIO_PIN_WIO_MISO,
+                  SOC_GPIO_PIN_WIO_SCK,
+                  SOC_GPIO_PIN_WIO_MOSI);
+      break;
     case NRF52_SEEED_T1000E:
       SPI.setPins(SOC_GPIO_PIN_T1000_MISO,
                   SOC_GPIO_PIN_T1000_SCK,
@@ -2833,6 +2932,10 @@ static void nRF52_swSer_begin(unsigned long baud)
 #if !defined(ARDUINO_ARCH_MBED) && !defined(ARDUINO_ARCH_ZEPHYR)
   switch (nRF52_board)
   {
+    case NRF52_SEEED_WIO_TRACKER_L1:
+      Serial_GNSS_In.setPins(SOC_GPIO_PIN_GNSS_WIO_RX,
+                             SOC_GPIO_PIN_GNSS_WIO_TX);
+      break;
     case NRF52_SEEED_T1000E:
       Serial_GNSS_In.setPins(SOC_GPIO_PIN_GNSS_T1000_RX,
                              SOC_GPIO_PIN_GNSS_T1000_TX);
@@ -3009,6 +3112,7 @@ static byte nRF52_Display_setup()
   byte rval = DISPLAY_NONE;
 
   if (nRF52_board == NRF52_NORDIC_PCA10059 ||
+      nRF52_board == NRF52_SEEED_WIO_TRACKER_L1 ||
       nRF52_board == NRF52_SEEED_T1000E    ||
       nRF52_board == NRF52_ELECROW_TN_M3) {
       /* Nothing to do */
@@ -3130,6 +3234,7 @@ void nRF52_Display_blank()
 static void nRF52_Display_fini(int reason)
 {
   if (nRF52_board == NRF52_NORDIC_PCA10059 ||
+      nRF52_board == NRF52_SEEED_WIO_TRACKER_L1 ||
       nRF52_board == NRF52_SEEED_T1000E    ||
       nRF52_board == NRF52_ELECROW_TN_M3)
           return;      /* Nothing to do */
@@ -3280,6 +3385,10 @@ static float nRF52_Battery_param(uint8_t param)
           bat_adc_pin = SOC_GPIO_PIN_T1000_BATTERY;
           mult        = SOC_ADC_T1000_VOLTAGE_DIV;
           break;
+        case NRF52_SEEED_WIO_TRACKER_L1:
+          bat_adc_pin = SOC_GPIO_PIN_WIO_BATTERY;
+          mult        = SOC_ADC_WIO_VOLTAGE_DIV;
+          break;
         case NRF52_ELECROW_TN_M1:
           bat_adc_pin = SOC_GPIO_PIN_M1_BATTERY;
           mult        = SOC_ADC_VOLTAGE_DIV;
@@ -3335,6 +3444,7 @@ static unsigned long nRF52_get_PPS_TimeMarker() {
 
 static bool nRF52_Baro_setup() {
   if (nRF52_board == NRF52_SEEED_T1000E ||
+      nRF52_board == NRF52_SEEED_WIO_TRACKER_L1 ||
       nRF52_board == NRF52_ELECROW_TN_M3)
         return false;
   // Baro_probe() no longer called from Baro_setup() so need to call it here:
@@ -3551,6 +3661,10 @@ static void nRF52_Button_setup()
       mode_button_pin = SOC_GPIO_PIN_M3_BUTTON;
       break;
 
+    case NRF52_SEEED_WIO_TRACKER_L1:
+      mode_button_pin = SOC_GPIO_PIN_WIO_BUTTON;
+      break;
+
     case NRF52_LILYGO_TECHO_REV_0:
     case NRF52_LILYGO_TECHO_REV_1:
     case NRF52_LILYGO_TECHO_REV_2:
@@ -3565,6 +3679,7 @@ static void nRF52_Button_setup()
   // Button(s) uses external pull up resistor.
   pinMode(mode_button_pin, nRF52_board == NRF52_LILYGO_TECHO_REV_1 ? INPUT_PULLUP   :
                            nRF52_board == NRF52_ELECROW_TN_M1      ? INPUT_PULLUP   :
+                           nRF52_board == NRF52_SEEED_WIO_TRACKER_L1 ? INPUT_PULLUP :
                            nRF52_board == NRF52_SEEED_T1000E       ? INPUT_PULLDOWN :
                            INPUT);
   if (up_button_pin != SOC_UNUSED_PIN) {

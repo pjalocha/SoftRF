@@ -45,7 +45,8 @@
 #define snprintf_P              snprintf
 #define EEPROM_commit()         {}
 
-// State when LED is litted
+// State when LED is litted. Board-specific active level is finalized below
+// after nRF52_board_id is declared.
 #if defined(LED_STATE_ON)
 #undef  LED_STATE_ON
 #endif /* LED_STATE_ON */
@@ -84,6 +85,14 @@ enum nRF52_board_id {
   NRF52_SEEED_WIO_TRACKER_L1,   // Wio-Tracker 2026
   NRF52_UNSUPPORTED
 };
+
+extern nRF52_board_id nRF52_board;
+
+#if defined(LED_STATE_ON)
+#undef  LED_STATE_ON
+#endif /* LED_STATE_ON */
+#define LED_STATE_ON            (hw_info.model == SOFTRF_MODEL_CARD || \
+                                 nRF52_board == NRF52_SEEED_WIO_TRACKER_L1 ? HIGH : LOW)
 
 // #define TECHO_DISPLAY_MODEL   GxEPD2_154_D67
 
@@ -549,7 +558,8 @@ struct rst_info {
 #define SOC_GPIO_LED_PCA10059_BLUE      _PINNUM(0, 12) // P0.12 (Blue)
 
 // start out with red LED while booting, may change colors later
-#define SOC_GPIO_PIN_STATUS   (hw_info.model == SOFTRF_MODEL_CARD ? SOC_GPIO_LED_T1000_RED   : \
+#define SOC_GPIO_PIN_STATUS   (nRF52_board == NRF52_SEEED_WIO_TRACKER_L1 ? SOC_GPIO_LED_WIO_GREEN : \
+                               hw_info.model == SOFTRF_MODEL_CARD ? SOC_GPIO_LED_T1000_RED   : \
                                hw_info.model == SOFTRF_MODEL_POCKET  ? SOC_GPIO_LED_M3_RED   : \
                                hw_info.model == SOFTRF_MODEL_HANDHELD ? SOC_GPIO_LED_M1_RED  : \
                                hw_info.revision == 0 ? SOC_GPIO_LED_TECHO_REV_0_RED : \
@@ -557,7 +567,8 @@ struct rst_info {
                                hw_info.revision == 2 ? SOC_GPIO_LED_TECHO_REV_2_RED : \
                                SOC_UNUSED_PIN /* SOC_GPIO_LED_PCA10059_STATUS */ )
 
-#define SOC_GPIO_LED_USBMSC   (hw_info.model == SOFTRF_MODEL_CARD  ? SOC_GPIO_LED_T1000_RED : \
+#define SOC_GPIO_LED_USBMSC   (nRF52_board == NRF52_SEEED_WIO_TRACKER_L1 ? SOC_GPIO_LED_WIO_GREEN : \
+                               hw_info.model == SOFTRF_MODEL_CARD  ? SOC_GPIO_LED_T1000_RED : \
                                hw_info.model == SOFTRF_MODEL_POCKET   ? SOC_GPIO_LED_M3_RED : \
                                hw_info.model == SOFTRF_MODEL_HANDHELD ? SOC_GPIO_LED_M1_RED : \
                                hw_info.revision == 0 ? SOC_GPIO_LED_TECHO_REV_0_RED : \
@@ -565,7 +576,8 @@ struct rst_info {
                                hw_info.revision == 2 ? SOC_GPIO_LED_TECHO_REV_2_RED : \
                                SOC_UNUSED_PIN /* SOC_GPIO_LED_PCA10059_RED */ )
 
-#define SOC_GPIO_LED_BLE      (hw_info.model == SOFTRF_MODEL_CARD  ? SOC_GPIO_LED_T1000_GREEN : \
+#define SOC_GPIO_LED_BLE      (nRF52_board == NRF52_SEEED_WIO_TRACKER_L1 ? SOC_GPIO_LED_WIO_GREEN : \
+                               hw_info.model == SOFTRF_MODEL_CARD  ? SOC_GPIO_LED_T1000_GREEN : \
                                hw_info.model == SOFTRF_MODEL_POCKET ? SOC_GPIO_LED_M3_BLUE    : \
                                hw_info.model == SOFTRF_MODEL_HANDHELD ? SOC_GPIO_LED_M1_BLUE  : \
                                hw_info.revision == 0 ? SOC_GPIO_LED_TECHO_REV_0_BLUE : \
@@ -573,7 +585,9 @@ struct rst_info {
                                hw_info.revision == 2 ? SOC_GPIO_LED_TECHO_REV_2_BLUE : \
                                SOC_UNUSED_PIN /* SOC_GPIO_LED_PCA10059_BLUE */ )
 
-#define SOC_GPIO_PIN_GNSS_PPS (hw_info.model == SOFTRF_MODEL_BADGE    ? \
+#define SOC_GPIO_PIN_GNSS_PPS (nRF52_board == NRF52_SEEED_WIO_TRACKER_L1 ? \
+                               SOC_GPIO_PIN_GNSS_WIO_PPS :             \
+                               hw_info.model == SOFTRF_MODEL_BADGE    ? \
                                SOC_GPIO_PIN_GNSS_TECHO_PPS :            \
                                hw_info.model == SOFTRF_MODEL_CARD     ? \
                                SOC_GPIO_PIN_GNSS_T1000_PPS :            \

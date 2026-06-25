@@ -258,6 +258,17 @@ void LED_loop() {
       return;
   }
 
+  if (nRF52_board == NRF52_SEEED_WIO_TRACKER_L1) {
+      if (Battery_voltage() <= Battery_threshold() ) {
+          digitalWrite(status_LED, (millis() & 0x0200)? HIGH : LOW);
+      } else if (! isValidFix()) {
+          digitalWrite(status_LED, (millis() & 0x080)? HIGH : LOW);
+      } else {
+          digitalWrite(status_LED, HIGH);
+      }
+      return;
+  }
+
   if (hw_info.model == SOFTRF_MODEL_BADGE) {   // T-Echo
 #if 1
       // use status_LED = green if Bluetooth not connected, blue if connected?

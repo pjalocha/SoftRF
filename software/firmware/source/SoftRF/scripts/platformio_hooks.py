@@ -12,7 +12,7 @@ pioenv = env.subst("$PIOENV").lower()
 if pioenv in ("tmotion", "t-motion"):
     env.BoardConfig().update("build.hwids", [["0x0483", "0x5740"]])
 
-if pioenv in ("techo", "t-echo"):
+if pioenv in ("nrf52", "techo", "t-echo"):
     env.BuildSources(
         "$BUILD_DIR/lib_manual/ESP32_I2C_Bus",
         str(libraries_dir / "ESP32_I2C_Bus"),
@@ -91,7 +91,7 @@ def build_dfuse(source, target, env):
     target_name = b"ST..."
     target_prefix = (
         b"Target"
-        + struct.pack("<BB", 0, 1)
+        + struct.pack("<BI", 0, 1)
         + target_name.ljust(255, b"\0")
         + struct.pack("<II", len(firmware) + 8, 1)
     )
@@ -107,7 +107,7 @@ def build_dfuse(source, target, env):
     print(f"DFU: wrote {dfu_path} ({len(firmware)} bytes at 0x{flash_base:08X})")
 
 
-if pioenv in ("techo", "t-echo"):
+if pioenv in ("nrf52", "techo", "t-echo"):
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", build_uf2)
 elif pioenv in ("tmotion", "t-motion"):
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", build_dfuse)
