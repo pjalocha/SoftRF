@@ -29,9 +29,12 @@ void  Buzzer_fini()        {}
 #include "Settings.h"
 #include "Strobe.h"
 
+#if defined(USE_OLED)
+#include "OLED.h"
+#endif
+
 #if defined(ESP32)
 #include <toneAC.h>
-#include "OLED.h"
 static uint8_t buzzer1pin = SOC_UNUSED_PIN;
 static uint8_t buzzer2pin = SOC_UNUSED_PIN;
 #endif

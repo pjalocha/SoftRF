@@ -39,6 +39,7 @@
 #include "../driver/LED.h"
 #include "../driver/Bluetooth.h"
 #include "../driver/EPD.h"
+#include "../driver/OLED.h"
 #include "../driver/Battery.h"
 #include "../driver/Buzzer.h"
 #include "../protocol/data/NMEA.h"
@@ -1647,6 +1648,9 @@ static void nRF52_post_init()
     Serial.print(F("GNSS    : "));
     Serial.println(hw_info.gnss  == GNSS_MODULE_AT65 ? F("PASS") : F("FAIL"));
     Serial.flush();
+    Serial.print(F("DISPLAY : "));
+    Serial.println(hw_info.display == DISPLAY_OLED_1_3 ? F("PASS") : F("FAIL"));
+    Serial.flush();
     Serial.print(F("FLASH   : "));
     Serial.println(hw_info.storage == STORAGE_NONE    ? F("N/A") : F("PASS"));
     Serial.flush();
@@ -3111,8 +3115,12 @@ static byte nRF52_Display_setup()
 {
   byte rval = DISPLAY_NONE;
 
-  if (nRF52_board == NRF52_NORDIC_PCA10059 ||
-      nRF52_board == NRF52_SEEED_WIO_TRACKER_L1 ||
+  if (nRF52_board == NRF52_SEEED_WIO_TRACKER_L1) {
+#if defined(USE_OLED)
+      rval = OLED_setup();
+#endif
+
+  } else if (nRF52_board == NRF52_NORDIC_PCA10059 ||
       nRF52_board == NRF52_SEEED_T1000E    ||
       nRF52_board == NRF52_ELECROW_TN_M3) {
       /* Nothing to do */
@@ -3211,6 +3219,14 @@ static void nRF52_Display_loop()
 {
   switch (hw_info.display)
   {
+#if defined(USE_OLED)
+  case DISPLAY_OLED_1_3:
+  case DISPLAY_OLED_TTGO:
+  case DISPLAY_OLED_HELTEC:
+    OLED_loop();
+    break;
+#endif /* USE_OLED */
+
 #if defined(USE_EPAPER)
   case DISPLAY_EPD_1_54:
     EPD_loop();
@@ -3233,8 +3249,18 @@ void nRF52_Display_blank()
 
 static void nRF52_Display_fini(int reason)
 {
+  if (nRF52_board == NRF52_SEEED_WIO_TRACKER_L1) {
+#if defined(USE_OLED)
+      OLED_fini(reason);
+      if (u8x8) {
+        delay(3000);
+        u8x8->noDisplay();
+      }
+#endif
+      return;
+  }
+
   if (nRF52_board == NRF52_NORDIC_PCA10059 ||
-      nRF52_board == NRF52_SEEED_WIO_TRACKER_L1 ||
       nRF52_board == NRF52_SEEED_T1000E    ||
       nRF52_board == NRF52_ELECROW_TN_M3)
           return;      /* Nothing to do */
@@ -3495,7 +3521,15 @@ void handleEvent(AceButton* button, uint8_t eventType,
     case AceButton::kEventClicked:
     case AceButton::kEventReleased:    // was commented out
 
-      if (nRF52_board == NRF52_ELECROW_TN_M3 || nRF52_board == NRF52_SEEED_T1000E) {
+      if (nRF52_board == NRF52_SEEED_WIO_TRACKER_L1) {
+
+#if defined(USE_OLED)
+          if (eventType == AceButton::kEventClicked) {
+              OLED_Next_Page();
+          }
+#endif
+
+      } else if (nRF52_board == NRF52_ELECROW_TN_M3 || nRF52_board == NRF52_SEEED_T1000E) {
 
           nRF52_BuzzerVolumeChange();   // toggle buzzer on/off
 
@@ -3599,7 +3633,9 @@ void handleEvent(AceButton* button, uint8_t eventType,
 
         // switch to red LED to indicate shutdown
 
-        if (hw_info.model == SOFTRF_MODEL_BADGE) {
+        if (nRF52_board == NRF52_SEEED_WIO_TRACKER_L1) {
+            digitalWrite(SOC_GPIO_LED_WIO_GREEN, HIGH);
+        } else if (hw_info.model == SOFTRF_MODEL_BADGE) {
             digitalWrite(SOC_GPIO_LED_TECHO_LED_RED, LOW);
             // ignore the other colors here
         }

@@ -72,6 +72,8 @@ enum
 
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
 U8X8_SSD1306_128X64_NONAME_HW_I2C     u8x8_i2c(U8X8_PIN_NONE);
+#elif defined(ARDUINO_ARCH_NRF52)
+U8X8_OLED_I2C_BUS_TYPE                 u8x8_i2c(U8X8_PIN_NONE);
 #elif defined(ARDUINO_ARCH_STM32)
 U8X8_OLED_I2C_BUS_TYPE                 u8x8_i2c(U8X8_PIN_NONE);
 #else
@@ -121,7 +123,7 @@ const char *ISO3166_CC[] = {
   [RF_BAND_KR]   = "KR"
 };
 
-const char *aircraft_type_lbl[] = {
+static const char *aircraft_type_lbl[] = {
   [AIRCRAFT_TYPE_UNKNOWN]    = "--",
   [AIRCRAFT_TYPE_GLIDER]     = "GL",
   [AIRCRAFT_TYPE_TOWPLANE]   = "TP",
@@ -173,11 +175,19 @@ byte OLED_setup()
 
   Wire.begin();
 
+#if defined(ARDUINO_ARCH_NRF52)
+  Wire.beginTransmission(SH1106_OLED_I2C_ADDR);
+  if (Wire.endTransmission() == 0) {
+    u8x8 = &u8x8_i2c;
+    rval = DISPLAY_OLED_1_3;
+  }
+#else
   Wire.beginTransmission(SSD1306_OLED_I2C_ADDR);
   if (Wire.endTransmission() == 0) {
     u8x8 = &u8x8_i2c;
     rval = (hw_info.model == SOFTRF_MODEL_BRACELET) ? DISPLAY_OLED_0_49 : DISPLAY_OLED_TTGO;
   }
+#endif
 
   if (u8x8) {
     u8x8->begin();

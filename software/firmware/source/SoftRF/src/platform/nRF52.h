@@ -663,9 +663,9 @@ struct rst_info {
 //#define USE_BASICMAC
 #define EXCLUDE_SX1276           //  -  3 kb
 
-//#define USE_OLED                 //  +    kb
-//#define EXCLUDE_OLED_BARO_PAGE
-//#define EXCLUDE_OLED_049
+#define USE_OLED                 //  +    kb
+#define EXCLUDE_OLED_BARO_PAGE
+#define EXCLUDE_OLED_049
 #define USE_EPAPER                 //  +    kb
 #define USE_EPD_TASK
 #define USE_TIME_SLOTS
