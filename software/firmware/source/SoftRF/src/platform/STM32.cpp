@@ -33,7 +33,9 @@
 #endif /* USE_OLED */
 #include "../driver/Baro.h"
 #include "../protocol/data/NMEA.h"
+#if !defined(EXCLUDE_GDL90)
 #include "../protocol/data/GDL90.h"
+#endif /* EXCLUDE_GDL90 */
 #if !defined(EXCLUDE_D1090)
 #include "../protocol/data/D1090.h"
 #endif /* EXCLUDE_D1090 */
@@ -401,6 +403,7 @@ static void STM32_post_init()
     default              :  Serial.println(F("NULL"));          break;
   }
 
+#if !defined(EXCLUDE_GDL90)
   Serial.print(F("GDL90  - "));
   switch (settings->gdl90)
   {
@@ -409,6 +412,7 @@ static void STM32_post_init()
     case DEST_NONE       :
     default              :  Serial.println(F("NULL"));          break;
   }
+#endif /* EXCLUDE_GDL90 */
 
 #if !defined(EXCLUDE_D1090)
   Serial.print(F("D1090  - "));

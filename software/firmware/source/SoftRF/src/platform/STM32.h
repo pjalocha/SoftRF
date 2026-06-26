@@ -218,7 +218,7 @@ typedef struct stm32_backup_struct {
 #endif
 //#define EXCLUDE_OLED_049
 //#define EXCLUDE_OLED_BARO_PAGE
-//#define USE_NMEA_CFG             //  +2.5 kb
+#define USE_TINY_NMEA_CFG        //  +    kb
 #if defined(TMOTION_COUNTERS_ONLY_TEST)
 #define EXCLUDE_BMP180
 #define EXCLUDE_BMP280
@@ -230,6 +230,8 @@ typedef struct stm32_backup_struct {
 #define EXCLUDE_UATM             //  -    kb
 #define EXCLUDE_UAT978           //  -    kb
 #define EXCLUDE_D1090            //  -    kb
+#define EXCLUDE_GDL90            //  -    kb
+#define EXCLUDE_WIND_PROJECTION  //  -    kb
 //#define USE_SERIAL_DEEP_SLEEP    //  + 12 kb
 //#define USE_BASICMAC           //  +  7 kb
 #define EXCLUDE_LED_RING         //  -    kb

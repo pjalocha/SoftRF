@@ -143,6 +143,31 @@ typedef struct GDL90_Msg_FF_ID {
 
 #endif
 
+#if defined(EXCLUDE_GDL90)
+static const char * const GDL90_CallSign_Prefix[] = {
+  [RF_PROTOCOL_NONE]      = "??",
+  [RF_PROTOCOL_OGNTP]     = "OG",
+  [RF_PROTOCOL_P3I]       = "PA",
+  [RF_PROTOCOL_ADSB_1090] = "AD",
+  [RF_PROTOCOL_ADSB_UAT]  = "UA",
+  [RF_PROTOCOL_FANET]     = "FA",
+  [RF_PROTOCOL_LEGACY]    = "FL",
+  [RF_PROTOCOL_LATEST]    = "FL",
+  [RF_PROTOCOL_ADSL]      = "AL",
+  [RF_PROTOCOL_GDL90]     = "GD"
+};
+
+#define AT_TO_GDL90(x)  GDL90_EMITTER_CATEGORY_NONE
+#define GDL90_TO_AT(x)  AIRCRAFT_TYPE_UNKNOWN
+
+static inline void GDL90_Export(void) {}
+static inline uint16_t GDL90_calcFCS(uint8_t, uint8_t *, int) { return 0; }
+static inline uint8_t *GDL90_EscapeFilter(uint8_t *buf, uint8_t *, int) { return buf; }
+static inline void process_traffic_message(char*) {}
+static inline void GDL90_bridge_buf(char, char*, int&) {}
+#else
+extern const char *GDL90_CallSign_Prefix[];
+
 #define AT_TO_GDL90(x)  ((x) > 15 ? \
    GDL90_EMITTER_CATEGORY_NONE : pgm_read_byte(&aircraft_type_to_gdl90[(x)]))
 
@@ -151,12 +176,12 @@ typedef struct GDL90_Msg_FF_ID {
 
 extern const uint8_t aircraft_type_to_gdl90[] PROGMEM;
 extern const uint8_t gdl90_to_aircraft_type[] PROGMEM;
-extern const char *GDL90_CallSign_Prefix[];
 
 void GDL90_Export(void);
 uint16_t GDL90_calcFCS(uint8_t, uint8_t *, int);
 uint8_t *GDL90_EscapeFilter(uint8_t *, uint8_t *, int);
 void process_traffic_message(char* buf);
 extern void GDL90_bridge_buf(char c, char* buf, int& n);
+#endif /* EXCLUDE_GDL90 */
 
 #endif /* GDL90HELPER_H */

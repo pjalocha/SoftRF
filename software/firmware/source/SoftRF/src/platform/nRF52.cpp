@@ -490,6 +490,28 @@ static void nRF52_Wio_flush()
 #endif /* NRF52_WIO_UART_CONSOLE */
 }
 
+static void nRF52_Wio_board_init()
+{
+  if (nRF52_board != NRF52_SEEED_WIO_TRACKER_L1) {
+    return;
+  }
+
+  digitalWrite(SOC_GPIO_PIN_SFL_WIO_SS, HIGH);
+  pinMode(SOC_GPIO_PIN_SFL_WIO_SS, OUTPUT);
+
+  digitalWrite(SOC_GPIO_PIN_WIO_BATTERY_EN, HIGH);
+  pinMode(SOC_GPIO_PIN_WIO_BATTERY_EN, OUTPUT);
+
+  digitalWrite(SOC_GPIO_PIN_WIO_BUZZER, LOW);
+  pinMode(SOC_GPIO_PIN_WIO_BUZZER, OUTPUT);
+
+  digitalWrite(SOC_GPIO_PIN_GNSS_WIO_WKE, HIGH);
+  pinMode(SOC_GPIO_PIN_GNSS_WIO_WKE, OUTPUT);
+
+  digitalWrite(SOC_GPIO_LED_WIO_GREEN, LOW);
+  pinMode(SOC_GPIO_LED_WIO_GREEN, OUTPUT);
+}
+
 static void nRF52_Wio_blink(uint8_t count)
 {
   if (nRF52_board != NRF52_SEEED_WIO_TRACKER_L1) {
@@ -514,6 +536,7 @@ static void nRF52_Wio_early_marker()
     return;
   }
 
+  nRF52_Wio_board_init();
   nRF52_Wio_serial_begin();
   nRF52_Wio_println(F("WIO: early setup"));
   nRF52_Wio_flush();
@@ -650,8 +673,13 @@ static void nRF52_setup()
     Wire.setPins(SOC_GPIO_PIN_WIO_SDA, SOC_GPIO_PIN_WIO_SCL);
 #endif
     Wire.begin();
-    Wire.beginTransmission(0x3C); /* Wio Tracker OLED */
-    if (Wire.endTransmission() == 0) {
+    Wire.beginTransmission(SH1106_WIO_OLED_I2C_ADDR); /* Wio Tracker SH1106 */
+    bool wio_oled_found = (Wire.endTransmission() == 0);
+    if (!wio_oled_found) {
+      Wire.beginTransmission(SSD1306_OLED_I2C_ADDR); /* older SSD1306 reports */
+      wio_oled_found = (Wire.endTransmission() == 0);
+    }
+    if (wio_oled_found) {
       nRF52_board = NRF52_SEEED_WIO_TRACKER_L1;
     }
     Wire.end();
@@ -1263,13 +1291,12 @@ nRF52_WDT_fini();
 
     case NRF52_SEEED_WIO_TRACKER_L1:
 
+      nRF52_Wio_board_init();
+
       digitalWrite(SOC_GPIO_LED_WIO_GREEN, HIGH);    // on while booting
       pinMode(SOC_GPIO_LED_WIO_GREEN, OUTPUT);
 
       pinMode(SOC_GPIO_PIN_WIO_BUTTON, INPUT_PULLUP);
-
-      digitalWrite(SOC_GPIO_PIN_WIO_BATTERY_EN, HIGH);
-      pinMode(SOC_GPIO_PIN_WIO_BATTERY_EN, OUTPUT);
 
       digitalWrite(SOC_GPIO_PIN_WIO_RXEN, HIGH);
       pinMode(SOC_GPIO_PIN_WIO_RXEN, OUTPUT);

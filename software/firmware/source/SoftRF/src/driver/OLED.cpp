@@ -176,7 +176,11 @@ byte OLED_setup()
   Wire.begin();
 
 #if defined(ARDUINO_ARCH_NRF52)
-  Wire.beginTransmission(SH1106_OLED_I2C_ADDR);
+  const uint8_t oled_addr =
+      (nRF52_board == NRF52_SEEED_WIO_TRACKER_L1) ?
+      SH1106_WIO_OLED_I2C_ADDR : SH1106_OLED_I2C_ADDR;
+
+  Wire.beginTransmission(oled_addr);
   if (Wire.endTransmission() == 0) {
     u8x8 = &u8x8_i2c;
     rval = DISPLAY_OLED_1_3;

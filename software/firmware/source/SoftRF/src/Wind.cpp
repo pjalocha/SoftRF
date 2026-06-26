@@ -27,8 +27,97 @@ static inline void toneAC(unsigned long, uint8_t = 10, unsigned long = 0, uint8_
 #endif
 
 #include "system/SoC.h"
+#include "system/Time.h"
 #include "TrafficHelper.h"
 #include "Wind.h"
+
+#if defined(EXCLUDE_WIND_PROJECTION)
+
+float wind_best_ns = 0.0;  /* mps */
+float wind_best_ew = 0.0;
+float wind_speed = 0.0;
+float wind_direction = 0.0;
+uint32_t Landed_time = 0;
+
+static constexpr float kMpsPerKnot = 0.51444444f;
+static constexpr float kFeetPerMeter = 3.2808399f;
+
+static void set_straight_vector(container_t *aircraft)
+{
+  static const int8_t ns_q7[16] = {
+    127, 117, 90, 49, 0, -49, -90, -117,
+    -127, -117, -90, -49, 0, 49, 90, 117
+  };
+  static const int8_t ew_q7[16] = {
+    0, 49, 90, 117, 127, 117, 90, 49,
+    0, -49, -90, -117, -127, -117, -90, -49
+  };
+
+  uint8_t sector = ((uint16_t) (aircraft->course + 11.25f) / 22) & 0x0F;
+  int16_t speed_qms = (int16_t) (aircraft->speed * (4.0f * kMpsPerKnot) + 0.5f);
+  int16_t ns = (int16_t) (((int32_t) speed_qms * ns_q7[sector]) / 127);
+  int16_t ew = (int16_t) (((int32_t) speed_qms * ew_q7[sector]) / 127);
+
+  aircraft->turnrate = 0.0f;
+  aircraft->circling = 0;
+  aircraft->heading = aircraft->course;
+
+  for (uint8_t i = 0; i < 6; ++i) {
+    aircraft->air_ns[i] = ns;
+    aircraft->air_ew[i] = ew;
+    if (i < 4) {
+      aircraft->fla_ns[i] = ns;
+      aircraft->fla_ew[i] = ew;
+    }
+  }
+}
+
+void this_airborne(bool validfix)
+{
+  ThisAircraft.airborne = (validfix && ThisAircraft.speed > 5.0f) ? 1 : 0;
+  if (!ThisAircraft.airborne) {
+    Landed_time = OurTime;
+  }
+}
+
+void project_this(container_t *aircraft)
+{
+  this_airborne(true);
+  set_straight_vector(aircraft);
+}
+
+void project_that(container_t *aircraft)
+{
+  set_straight_vector(aircraft);
+}
+
+void Estimate_Wind(void)
+{
+  project_this(&ThisAircraft);
+}
+
+float Estimate_Climbrate(void)
+{
+  static float avg_climbrate = 0.0f;
+  uint32_t interval_ms = ThisAircraft.gnsstime_ms - ThisAircraft.prevtime_ms;
+  if (interval_ms < 500) {
+    return avg_climbrate;
+  }
+
+  float climbrate = (ThisAircraft.altitude - ThisAircraft.prevaltitude) *
+                    (kFeetPerMeter * 60000.0f / (float) interval_ms);
+  if (climbrate > 4000.0f || climbrate < -4000.0f) {
+    return avg_climbrate;
+  }
+  if (climbrate < 100.0f && climbrate > -100.0f) {
+    climbrate = 0.0f;
+  }
+  avg_climbrate = 0.5f * (avg_climbrate + climbrate);
+  return avg_climbrate;
+}
+
+#else /* EXCLUDE_WIND_PROJECTION */
+
 #include "driver/Settings.h"
 #include "driver/GNSS.h"
 #include "driver/RF.h"
@@ -1413,3 +1502,5 @@ float Estimate_Climbrate(void)
 
     return avg_climbrate;
 }
+
+#endif /* EXCLUDE_WIND_PROJECTION */

@@ -925,6 +925,186 @@ bool NMEA_encode(const char *buf, const int len)
     return false;
 }
 
+#if defined(USE_TINY_NMEA_CFG)
+static uint8_t tiny_nmea_hex(char c)
+{
+    if (c >= '0' && c <= '9')
+        return c - '0';
+    if (c >= 'A' && c <= 'F')
+        return c - 'A' + 10;
+    if (c >= 'a' && c <= 'f')
+        return c - 'a' + 10;
+    return 0xFF;
+}
+
+static bool tiny_nmea_checksum_ok(char *buf, int len)
+{
+    char *end = &buf[len - 1];
+    while (end > buf && (*end == '\r' || *end == '\n'))
+        --end;
+    if (end < buf + 4 || end[-2] != '*')
+        return false;
+
+    uint8_t rx_hi = tiny_nmea_hex(end[-1]);
+    uint8_t rx_lo = tiny_nmea_hex(end[0]);
+    if (rx_hi > 0x0F || rx_lo > 0x0F)
+        return false;
+
+    uint8_t sum = 0;
+    for (char *p = buf + 1; p < end - 2; ++p)
+        sum ^= (uint8_t) *p;
+    return sum == (uint8_t) ((rx_hi << 4) | rx_lo);
+}
+
+static void tiny_nmea_reply(const char *text)
+{
+    char payload[80];
+    strncpy(payload, text, sizeof(payload));
+    payload[sizeof(payload) - 1] = '\0';
+    snprintf(CONFBuffer, sizeof(CONFBuffer), "$PSRFS,%s*", payload);
+    unsigned int nmealen = NMEA_add_checksum(CONFBuffer);
+    uint8_t dest = NMEA_Source;
+    NMEA_Source = DEST_NONE;
+    NMEA_Out(dest, CONFBuffer, nmealen, true, true);
+    NMEA_Source = dest;
+}
+
+static bool tiny_nmea_set_u8(const char *value, uint8_t *setting)
+{
+    if (*value < '0' || *value > '9')
+        return false;
+    *setting = (uint8_t) atoi(value);
+    return true;
+}
+
+static bool tiny_nmea_set_i8(const char *value, int8_t *setting)
+{
+    if ((*value < '0' || *value > '9') && *value != '-')
+        return false;
+    *setting = (int8_t) atoi(value);
+    return true;
+}
+
+static bool tiny_nmea_set_hex24(const char *value, uint32_t *setting)
+{
+    if (tiny_nmea_hex(*value) > 0x0F)
+        return false;
+    *setting = strtoul(value, NULL, 16) & 0x00FFFFFF;
+    return true;
+}
+
+static bool tiny_nmea_get_setting(const char *label, char *out, size_t out_size)
+{
+    if (strcmp(label, "id_method") == 0)
+        snprintf(out, out_size, "%u", settings->id_method);
+    else if (strcmp(label, "aircraft_id") == 0)
+        snprintf(out, out_size, "%06X", settings->aircraft_id);
+    else if (strcmp(label, "ignore_id") == 0)
+        snprintf(out, out_size, "%06X", settings->ignore_id);
+    else if (strcmp(label, "follow_id") == 0)
+        snprintf(out, out_size, "%06X", settings->follow_id);
+    else if (strcmp(label, "protocol") == 0)
+        snprintf(out, out_size, "%u", settings->rf_protocol);
+    else if (strcmp(label, "altprotocol") == 0)
+        snprintf(out, out_size, "%u", settings->altprotocol);
+    else if (strcmp(label, "flr_adsl") == 0)
+        snprintf(out, out_size, "%u", settings->flr_adsl);
+    else if (strcmp(label, "band") == 0)
+        snprintf(out, out_size, "%u", settings->band);
+    else if (strcmp(label, "acft_type") == 0)
+        snprintf(out, out_size, "%u", settings->acft_type);
+    else if (strcmp(label, "tx_power") == 0)
+        snprintf(out, out_size, "%d", settings->txpower);
+    else
+        return false;
+    return true;
+}
+
+static bool tiny_nmea_set_setting(const char *label, const char *value)
+{
+    if (strcmp(label, "id_method") == 0)
+        return tiny_nmea_set_u8(value, &settings->id_method);
+    if (strcmp(label, "aircraft_id") == 0)
+        return tiny_nmea_set_hex24(value, &settings->aircraft_id);
+    if (strcmp(label, "ignore_id") == 0)
+        return tiny_nmea_set_hex24(value, &settings->ignore_id);
+    if (strcmp(label, "follow_id") == 0)
+        return tiny_nmea_set_hex24(value, &settings->follow_id);
+    if (strcmp(label, "protocol") == 0)
+        return tiny_nmea_set_u8(value, &settings->rf_protocol);
+    if (strcmp(label, "altprotocol") == 0)
+        return tiny_nmea_set_u8(value, &settings->altprotocol);
+    if (strcmp(label, "flr_adsl") == 0)
+        return tiny_nmea_set_u8(value, &settings->flr_adsl);
+    if (strcmp(label, "band") == 0)
+        return tiny_nmea_set_u8(value, &settings->band);
+    if (strcmp(label, "acft_type") == 0)
+        return tiny_nmea_set_u8(value, &settings->acft_type);
+    if (strcmp(label, "tx_power") == 0)
+        return tiny_nmea_set_i8(value, &settings->txpower);
+    return false;
+}
+
+static bool NMEA_Process_Tiny_SRF_SKV(char *buf, int len)
+{
+    if (len < 10 || strncmp(buf, "$PSRFS,", 7) != 0)
+        return false;
+
+    NMEA_bridge_sent = true;
+    if (!tiny_nmea_checksum_ok(buf, len)) {
+        tiny_nmea_reply("0,checksum,error");
+        return true;
+    }
+
+    char *star = strchr(buf, '*');
+    if (!star)
+        return true;
+    *star = '\0';
+
+    char *version = buf + 7;
+    char *label = strchr(version, ',');
+    if (!label) {
+        tiny_nmea_reply("0,syntax,error");
+        return true;
+    }
+    *label++ = '\0';
+
+    char *value = strchr(label, ',');
+    if (value)
+        *value++ = '\0';
+
+    char current[12];
+    if (!tiny_nmea_get_setting(label, current, sizeof(current))) {
+        snprintf(CONFBuffer, sizeof(CONFBuffer), "0,%s,no matching label", label);
+        tiny_nmea_reply(CONFBuffer);
+        return true;
+    }
+
+    if (!value || strcmp(value, "?") == 0) {
+        snprintf(CONFBuffer, sizeof(CONFBuffer), "0,%s,%s", label, current);
+        tiny_nmea_reply(CONFBuffer);
+        return true;
+    }
+
+    if (!tiny_nmea_set_setting(label, value)) {
+        snprintf(CONFBuffer, sizeof(CONFBuffer), "0,%s,error", label);
+        tiny_nmea_reply(CONFBuffer);
+        return true;
+    }
+
+    tiny_nmea_get_setting(label, current, sizeof(current));
+    snprintf(CONFBuffer, sizeof(CONFBuffer), "%c,%s,%s", version[0], label, current);
+    tiny_nmea_reply(CONFBuffer);
+
+    if (version[0] == '1') {
+        save_settings_to_file(true);
+        delay(200);
+        SoC->reset();
+    }
+    return true;
+}
+#endif /* USE_TINY_NMEA_CFG */
+
 // Send buffered sentences to bridged outputs
 bool NMEA_bridge_sent = false;
 void NMEA_bridge_send(char *buf, int len)
@@ -982,6 +1162,11 @@ void NMEA_bridge_send(char *buf, int len)
       }
     }
 #endif
+
+#if defined(USE_TINY_NMEA_CFG)
+    if (NMEA_Process_Tiny_SRF_SKV(buf, len))
+        return;
+#endif /* USE_TINY_NMEA_CFG */
 
     // remaining are sentences that are NOT GNSS, FLARM or PSRF/PSKV
     // forward them to configured outputs, but do not echo to source

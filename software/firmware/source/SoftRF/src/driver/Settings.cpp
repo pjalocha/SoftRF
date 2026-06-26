@@ -178,9 +178,18 @@ static void init_stgdesc()
   stgdesc[STG_MODE_S]     = { "msmode_s",     (char*)&settings->mode_s,     esp_only(STG_INT1), 0 };
   stgdesc[STG_HRANGE1090] = { "h9hrange1090", (char*)&settings->hrange1090, esp_only(STG_UINT1), 0 };
   stgdesc[STG_VRANGE1090] = { "v9vrange1090", (char*)&settings->vrange1090, esp_only(STG_UINT1), 0 };
+#if defined(EXCLUDE_GDL90)
+  stgdesc[STG_GDL90_IN]   = { "9igdl90_in",   (char*)&settings->gdl90_in,   STG_VOID, 0 };
+  stgdesc[STG_GDL90]      = { "90gdl90",      (char*)&settings->gdl90,      STG_VOID, 0 };
+#else
   stgdesc[STG_GDL90_IN]   = { "9igdl90_in",   (char*)&settings->gdl90_in,   esp_only(STG_UINT1), 0 };
   stgdesc[STG_GDL90]      = { "90gdl90",      (char*)&settings->gdl90,      STG_UINT1, 0 };
+#endif /* EXCLUDE_GDL90 */
+#if defined(EXCLUDE_D1090)
+  stgdesc[STG_D1090]      = { "d9d1090",      (char*)&settings->d1090,      STG_VOID, 0 };
+#else
   stgdesc[STG_D1090]      = { "d9d1090",      (char*)&settings->d1090,      STG_UINT1, 0 };
+#endif /* EXCLUDE_D1090 */
   stgdesc[STG_RELAY]      = { "ryrelay",      (char*)&settings->relay,      STG_UINT1, 0 };
   stgdesc[STG_EXPIRE]     = { "exexpire",     (char*)&settings->expire,     STG_INT1, 0 };
   stgdesc[STG_PFLAA_CS]   = { "acpflaa_cs",   (char*)&settings->pflaa_cs,   STG_UINT1, 0 };

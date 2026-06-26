@@ -24,6 +24,7 @@ extern U8X8 *u8x8;
 
 #define SSD1306_OLED_I2C_ADDR   0x3C
 #define SH1106_OLED_I2C_ADDR    0x3C /* 0x3D */
+#define SH1106_WIO_OLED_I2C_ADDR 0x3D
 
 #define isTimeToOLED()          (millis() - OLEDTimeMarker > 500)
 

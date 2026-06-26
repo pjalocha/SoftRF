@@ -26,6 +26,9 @@
 #include "../../system/SoC.h"
 #include "../../system/Time.h"
 #include "GDL90.h"
+
+#if !defined(EXCLUDE_GDL90)
+
 #include "../radio/ES1090.h"
 #include "../../driver/RF.h"
 #include "../../driver/Baro.h"
@@ -669,3 +672,5 @@ void GDL90_bridge_buf(char c, char* buf, int& n)
        buf[n++] = c;
     }
 }
+
+#endif /* EXCLUDE_GDL90 */

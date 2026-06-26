@@ -508,7 +508,7 @@ struct rst_info {
 #define SOC_GPIO_PIN_GNSS_WIO_RX      _PINNUM(0, 26) // nRF RX, GNSS TX
 #define SOC_GPIO_PIN_GNSS_WIO_TX      _PINNUM(0, 27) // nRF TX, GNSS RX
 #define SOC_GPIO_PIN_GNSS_WIO_PPS     SOC_UNUSED_PIN
-#define SOC_GPIO_PIN_GNSS_WIO_WKE     SOC_UNUSED_PIN
+#define SOC_GPIO_PIN_GNSS_WIO_WKE     _PINNUM(1,  9) // D0, GNSS standby/wake
 #define SOC_GPIO_PIN_GNSS_WIO_RST     SOC_UNUSED_PIN
 
 /* SX1262 SPI */
@@ -545,6 +545,14 @@ struct rst_info {
 
 /* Buzzer */
 #define SOC_GPIO_PIN_WIO_BUZZER       _PINNUM(1, 0)
+
+/* P25Q16H QSPI flash */
+#define SOC_GPIO_PIN_SFL_WIO_SCK      _PINNUM(0, 21)
+#define SOC_GPIO_PIN_SFL_WIO_SS       _PINNUM(0, 25)
+#define SOC_GPIO_PIN_SFL_WIO_MOSI     _PINNUM(0, 20) // QSPI IO0
+#define SOC_GPIO_PIN_SFL_WIO_MISO     _PINNUM(0, 24) // QSPI IO1
+#define SOC_GPIO_PIN_SFL_WIO_WP       _PINNUM(0, 22) // QSPI IO2
+#define SOC_GPIO_PIN_SFL_WIO_HOLD     _PINNUM(0, 23) // QSPI IO3
 
 /* Optional UART console. Native USB CDC is the primary console on Wio. */
 #if !defined(SOC_GPIO_PIN_CONS_WIO_RX)
