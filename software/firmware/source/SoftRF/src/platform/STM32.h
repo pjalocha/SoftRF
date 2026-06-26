@@ -213,13 +213,23 @@ typedef struct stm32_backup_struct {
 #define EXCLUDE_GNSS_GOKE
 #define EXCLUDE_GNSS_AT65
 
+#if !defined(TMOTION_COUNTERS_ONLY_TEST)
 #define USE_OLED                 //  +3.5 kb
+#endif
 //#define EXCLUDE_OLED_049
 //#define EXCLUDE_OLED_BARO_PAGE
 //#define USE_NMEA_CFG             //  +2.5 kb
+#if defined(TMOTION_COUNTERS_ONLY_TEST)
+#define EXCLUDE_BMP180
+#define EXCLUDE_BMP280
+#endif
 #define EXCLUDE_MPL3115A2        //  -  1 kb
 #define EXCLUDE_NRF905           //  -  2 kb
 #define EXCLUDE_EGM96            //  - 16 kb
+#define EXCLUDE_MAVLINK          //  -    kb
+#define EXCLUDE_UATM             //  -    kb
+#define EXCLUDE_UAT978           //  -    kb
+#define EXCLUDE_D1090            //  -    kb
 //#define USE_SERIAL_DEEP_SLEEP    //  + 12 kb
 //#define USE_BASICMAC           //  +  7 kb
 #define EXCLUDE_LED_RING         //  -    kb

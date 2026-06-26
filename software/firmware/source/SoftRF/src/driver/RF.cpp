@@ -42,7 +42,6 @@
 #include "../protocol/data/MAVLink.h"
 #endif /* EXCLUDE_MAVLINK */
 #include "../protocol/radio/RxPkt.h"
-#include <fec.h>
 
 #if LOGGER_IS_ENABLED
 #include "../system/Log.h"
@@ -767,8 +766,10 @@ Serial.println(bytes2Hex((byte *)RL_rxPacket, size));
       } else {
           RF_last_protocol = RF_PROTOCOL_NONE;
           //success = false;
-Serial.printf("hw Unidentified packet protocol 0x%02x 0x%02x s.b. 0x%02x 0x%02x\r\n",
-byte1, byte2, FLR_ID_BYTE_1, FLR_ID_BYTE_2);
+          if (settings->debug_flags & DEBUG_DEEPER) {
+              Serial.printf("hw Unidentified packet protocol 0x%02x 0x%02x s.b. 0x%02x 0x%02x\r\n",
+                            byte1, byte2, FLR_ID_BYTE_1, FLR_ID_BYTE_2);
+          }
           return 0;
       }
     }

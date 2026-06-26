@@ -89,7 +89,8 @@ bool sx1276_probe()
   if (state == RADIOLIB_ERR_NONE) {
     //Serial.println(F("Found sx1276"));
   } else {
-    Serial.println(F("did not find sx1276"));
+    Serial.print(F("did not find sx1276: "));
+    Serial.println(state);
     delete radio_sx1276;
     delete mod;
     return false;

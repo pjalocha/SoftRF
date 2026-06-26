@@ -451,6 +451,105 @@ static uint32_t latch;
 
 static void nRF52_WDT_fini();   // forward declaration, resets WDT timer
 
+static void nRF52_Wio_serial_begin()
+{
+  if (nRF52_board != NRF52_SEEED_WIO_TRACKER_L1) {
+    return;
+  }
+
+  Serial.begin(SERIAL_OUT_BR, SERIAL_OUT_BITS);
+
+#if defined(NRF52_WIO_UART_CONSOLE)
+  if (SOC_GPIO_PIN_CONS_WIO_RX != SOC_UNUSED_PIN &&
+      SOC_GPIO_PIN_CONS_WIO_TX != SOC_UNUSED_PIN) {
+    Serial1.setPins(SOC_GPIO_PIN_CONS_WIO_RX, SOC_GPIO_PIN_CONS_WIO_TX);
+    Serial1.begin(SERIAL_OUT_BR, SERIAL_OUT_BITS);
+  }
+#endif /* NRF52_WIO_UART_CONSOLE */
+}
+
+static void nRF52_Wio_println(const __FlashStringHelper *msg)
+{
+  Serial.println(msg);
+#if defined(NRF52_WIO_UART_CONSOLE)
+  if (SOC_GPIO_PIN_CONS_WIO_RX != SOC_UNUSED_PIN &&
+      SOC_GPIO_PIN_CONS_WIO_TX != SOC_UNUSED_PIN) {
+    Serial1.println(msg);
+  }
+#endif /* NRF52_WIO_UART_CONSOLE */
+}
+
+static void nRF52_Wio_flush()
+{
+  Serial.flush();
+#if defined(NRF52_WIO_UART_CONSOLE)
+  if (SOC_GPIO_PIN_CONS_WIO_RX != SOC_UNUSED_PIN &&
+      SOC_GPIO_PIN_CONS_WIO_TX != SOC_UNUSED_PIN) {
+    Serial1.flush();
+  }
+#endif /* NRF52_WIO_UART_CONSOLE */
+}
+
+static void nRF52_Wio_blink(uint8_t count)
+{
+  if (nRF52_board != NRF52_SEEED_WIO_TRACKER_L1) {
+    return;
+  }
+
+  pinMode(SOC_GPIO_LED_WIO_GREEN, OUTPUT);
+
+  for (uint8_t i = 0; i < count; i++) {
+    digitalWrite(SOC_GPIO_LED_WIO_GREEN, HIGH);
+    delay(80);
+    digitalWrite(SOC_GPIO_LED_WIO_GREEN, LOW);
+    delay(120);
+  }
+
+  digitalWrite(SOC_GPIO_LED_WIO_GREEN, HIGH);
+}
+
+static void nRF52_Wio_early_marker()
+{
+  if (nRF52_board != NRF52_SEEED_WIO_TRACKER_L1) {
+    return;
+  }
+
+  nRF52_Wio_serial_begin();
+  nRF52_Wio_println(F("WIO: early setup"));
+  nRF52_Wio_flush();
+  nRF52_Wio_blink(3);
+}
+
+static void nRF52_Wio_boot_marker()
+{
+  if (nRF52_board != NRF52_SEEED_WIO_TRACKER_L1) {
+    return;
+  }
+
+  nRF52_Wio_println(F("WIO: USB serial started"));
+  nRF52_Wio_flush();
+
+#if defined(USE_OLED)
+  byte display = OLED_setup();
+  Serial.print(F("WIO: OLED "));
+  Serial.println(display == DISPLAY_NONE ? F("not detected") : F("detected"));
+#if defined(NRF52_WIO_UART_CONSOLE)
+  if (SOC_GPIO_PIN_CONS_WIO_RX != SOC_UNUSED_PIN &&
+      SOC_GPIO_PIN_CONS_WIO_TX != SOC_UNUSED_PIN) {
+    Serial1.print(F("WIO: OLED "));
+    Serial1.println(display == DISPLAY_NONE ? F("not detected") : F("detected"));
+  }
+#endif /* NRF52_WIO_UART_CONSOLE */
+  nRF52_Wio_flush();
+
+  if (u8x8) {
+    u8x8->clear();
+    u8x8->draw2x2String(4, 2, "WIO");
+    u8x8->draw2x2String(4, 5, "BOOT");
+  }
+#endif /* USE_OLED */
+}
+
 
 static void nRF52_setup()
 {
@@ -557,6 +656,12 @@ static void nRF52_setup()
     }
     Wire.end();
   }
+
+#if defined(NRF52_FALLBACK_WIO_TRACKER)
+  if (nRF52_board == NRF52_UNSUPPORTED) {
+    nRF52_board = NRF52_SEEED_WIO_TRACKER_L1;
+  }
+#endif
 
   if (nRF52_board != NRF52_SEEED_WIO_TRACKER_L1 &&
       nRF52_board != NRF52_ELECROW_TN_M1 &&
@@ -827,6 +932,7 @@ delay(150);
       hw_info.model             = SOFTRF_MODEL_BADGE;
       nRF52_Device_Manufacturer = "Seeed Studio";
       nRF52_Device_Model        = "Wio Tracker";
+      nRF52_Wio_early_marker();
   }
 
 #if !defined(ARDUINO_ARCH_MBED) && !defined(ARDUINO_ARCH_ZEPHYR)
@@ -1038,6 +1144,13 @@ nRF52_WDT_fini();
   USBDevice.setManufacturerDescriptor(nRF52_Device_Manufacturer);
   USBDevice.setProductDescriptor(nRF52_Device_Model);
   USBDevice.setDeviceVersion(nRF52_Device_Version);
+
+  if (nRF52_board == NRF52_SEEED_WIO_TRACKER_L1) {
+    USBDevice.detach();
+    delay(20);
+    USBDevice.attach();
+    nRF52_Wio_early_marker();
+  }
 #endif /* ARDUINO_ARCH_MBED */
 
 nRF52_WDT_fini();
@@ -1287,7 +1400,13 @@ nRF52_WDT_fini();
   switch (nRF52_board)
   {
     case NRF52_SEEED_WIO_TRACKER_L1:
-      /* Wio Tracker has no separate console UART in this mapping. */
+#if defined(NRF52_WIO_UART_CONSOLE)
+      if (SOC_GPIO_PIN_CONS_WIO_RX != SOC_UNUSED_PIN &&
+          SOC_GPIO_PIN_CONS_WIO_TX != SOC_UNUSED_PIN) {
+        Serial1.setPins(SOC_GPIO_PIN_CONS_WIO_RX, SOC_GPIO_PIN_CONS_WIO_TX);
+        Serial1.begin(SERIAL_OUT_BR, SERIAL_OUT_BITS);
+      }
+#endif /* NRF52_WIO_UART_CONSOLE */
       break;
     case NRF52_SEEED_T1000E:
       Serial1.setPins(SOC_GPIO_PIN_CONS_T1000_RX, SOC_GPIO_PIN_CONS_T1000_TX);
@@ -1454,6 +1573,8 @@ nRF52_WDT_fini();
 #if defined(USE_TINYUSB) && defined(USBCON)
   for (int i=0; i < 20; i++) {if (Serial) break; else delay(100);}
 #endif
+
+  nRF52_Wio_boot_marker();
 
   if (nRF52_board == NRF52_LILYGO_TECHO_PLUS) {
     nRF52_has_vibra = vibra.begin(Wire, DRV2605_ADDRESS);

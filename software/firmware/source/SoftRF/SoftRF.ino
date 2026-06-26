@@ -571,13 +571,23 @@ Serial.println("Tentative GNSS fix");
         GNSSTimeMarker = millis();
         float lat = gnss.location.lat();
         float lon = gnss.location.lng();
-        Serial.printf("Stable GNSS fix:\r\n"
-            "lat/lon: %.5f %.5f\r\n"
-            "date: %d %d %d\r\n"
-            "time: %d %d %d\r\n",
-            lat, lon,
-            gnss.date.year(), gnss.date.month(), gnss.date.day(),
-            gnss.time.hour(), gnss.time.minute(), gnss.time.second());
+        Serial.println("Stable GNSS fix:");
+        Serial.print("lat/lon: ");
+        Serial.print(lat, 5);
+        Serial.print(' ');
+        Serial.println(lon, 5);
+        Serial.print("date: ");
+        Serial.print(gnss.date.year());
+        Serial.print(' ');
+        Serial.print(gnss.date.month());
+        Serial.print(' ');
+        Serial.println(gnss.date.day());
+        Serial.print("time: ");
+        Serial.print(gnss.time.hour());
+        Serial.print(' ');
+        Serial.print(gnss.time.minute());
+        Serial.print(' ');
+        Serial.println(gnss.time.second());
         (void) leap_seconds_valid();    // computes leap_seconds_correction
         if ( /* settings->volume != BUZZER_OFF && */ settings->volume != BUZZER_EXT) {
           SoC->Buzzer_tone(440, 333);

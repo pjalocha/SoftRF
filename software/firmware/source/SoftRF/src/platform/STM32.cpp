@@ -28,11 +28,15 @@
 #include "../driver/Buzzer.h"
 #include <EEPROM.h>
 #include "../driver/Battery.h"
+#if defined(USE_OLED)
 #include "../driver/OLED.h"
+#endif /* USE_OLED */
 #include "../driver/Baro.h"
 #include "../protocol/data/NMEA.h"
 #include "../protocol/data/GDL90.h"
+#if !defined(EXCLUDE_D1090)
 #include "../protocol/data/D1090.h"
+#endif /* EXCLUDE_D1090 */
 
 #include <STM32LowPower.h>
 
@@ -41,12 +45,12 @@ lmic_pinmap lmic_pins = {
     .nss = SOC_GPIO_PIN_SS,
     .txe = LMIC_UNUSED_PIN,
     .rxe = LMIC_UNUSED_PIN,
-#if !defined(USE_OGN_RF_DRIVER)
-    .rst = LMIC_UNUSED_PIN,
-    .dio = {LMIC_UNUSED_PIN, LMIC_UNUSED_PIN, LMIC_UNUSED_PIN},
-#else
+#if defined(USE_OGN_RF_DRIVER) || defined(ARDUINO_NUCLEO_L073RZ)
     .rst = SOC_GPIO_PIN_RST,
     .dio = {SOC_GPIO_PIN_DIO0, LMIC_UNUSED_PIN, LMIC_UNUSED_PIN},
+#else
+    .rst = LMIC_UNUSED_PIN,
+    .dio = {LMIC_UNUSED_PIN, LMIC_UNUSED_PIN, LMIC_UNUSED_PIN},
 #endif
     .busy = LMIC_UNUSED_PIN,
     .tcxo = LMIC_UNUSED_PIN,
@@ -406,6 +410,7 @@ static void STM32_post_init()
     default              :  Serial.println(F("NULL"));          break;
   }
 
+#if !defined(EXCLUDE_D1090)
   Serial.print(F("D1090  - "));
   switch (settings->d1090)
   {
@@ -414,6 +419,7 @@ static void STM32_post_init()
     case DEST_NONE       :
     default              :  Serial.println(F("NULL"));          break;
   }
+#endif /* EXCLUDE_D1090 */
 
   Serial.println();
   Serial.flush();
@@ -448,6 +454,10 @@ static void STM32_fini(int reason)
 
   pinMode(SOC_GPIO_PIN_SDA,  INPUT_ANALOG);
   pinMode(SOC_GPIO_PIN_SCL,  INPUT_ANALOG);
+
+#if defined(ARDUINO_NUCLEO_L073RZ)
+  STM32_tcxo(false);
+#endif /* ARDUINO_NUCLEO_L073RZ */
 
   if (lmic_pins.rst != LMIC_UNUSED_PIN) pinMode(lmic_pins.rst,  INPUT_ANALOG);
 
@@ -576,6 +586,13 @@ static bool STM32_EEPROM_begin(size_t size)
 
 static void STM32_SPI_begin()
 {
+#if defined(ARDUINO_NUCLEO_L073RZ)
+  if (STM32_has_TCXO) {
+    STM32_tcxo(true);
+    delay(10);
+  }
+#endif /* ARDUINO_NUCLEO_L073RZ */
+
   SPI.setMISO(SOC_GPIO_PIN_MISO);
   SPI.setMOSI(SOC_GPIO_PIN_MOSI);
   SPI.setSCLK(SOC_GPIO_PIN_SCK);

@@ -27,6 +27,10 @@
 #define INCLUDE_LR11X0                    (1)
 #endif
 
+#if defined(ARDUINO_ARCH_STM32)
+#define INCLUDE_SX127X                    (1)
+#endif
+
 
 #if !defined(INCLUDE_CC1101)
 #define RADIOLIB_EXCLUDE_CC1101           (1)

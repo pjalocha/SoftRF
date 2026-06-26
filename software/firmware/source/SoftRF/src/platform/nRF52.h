@@ -546,6 +546,14 @@ struct rst_info {
 /* Buzzer */
 #define SOC_GPIO_PIN_WIO_BUZZER       _PINNUM(1, 0)
 
+/* Optional UART console. Native USB CDC is the primary console on Wio. */
+#if !defined(SOC_GPIO_PIN_CONS_WIO_RX)
+#define SOC_GPIO_PIN_CONS_WIO_RX      SOC_UNUSED_PIN
+#endif
+#if !defined(SOC_GPIO_PIN_CONS_WIO_TX)
+#define SOC_GPIO_PIN_CONS_WIO_TX      SOC_UNUSED_PIN
+#endif
+
 /************** general section *************/
 
 //#define SOC_GPIO_PIN_GNSS_PPS _PINNUM(1, 4) // P1.04
